@@ -1,0 +1,13 @@
+{
+  "name": "Pocket Trails — 동네 몬스터 탐험",
+  "short_name": "Pocket Trails",
+  "description": "걷고, 발견하고, 수집하는 모바일 탐험 게임",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f5ed",
+  "theme_color": "#17342e",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
