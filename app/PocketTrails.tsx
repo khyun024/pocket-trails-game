@@ -51,6 +51,9 @@ const BERRIES = {
   pinap: { name: "파인열매", icon: "🍍", key: "pinapBerries" as const, description: "포획 사탕 2배" },
 };
 const RAID_BOSSES = MONSTERS.filter((monster) => monster.raidOnly);
+const SECRET_TRIGGER_ID = "monster-025";
+const SECRET_MONSTER_ID = "monster-031";
+const SECRET_APPEAR_CHANCE = .15;
 const POKESTOP_COOLDOWN_MS = 30_000;
 const CHARGE_STATION_COOLDOWN_MS = 30_000;
 const WORLD_COLUMNS = 9;
@@ -88,6 +91,9 @@ const ENCOUNTER_SIZES: Record<string, number> = {
   "monster-028": 220,
   "monster-029": 220,
   "monster-030": 145,
+  "monster-031": 220,
+  "monster-032": 225,
+  "monster-033": 225,
 };
 
 function MonsterSprite({ monster }: { monster: Monster }) {
@@ -210,6 +216,7 @@ export function PocketTrails() {
   const [stopCooldowns, setStopCooldowns] = useState<Record<string, number>>({});
   const [chargeCooldownUntil, setChargeCooldownUntil] = useState(0);
   const [cooldownNow, setCooldownNow] = useState(Date.now());
+  const [raidRotation, setRaidRotation] = useState(Math.floor(Date.now() / 60_000));
   const [loaded, setLoaded] = useState(false);
   const [gps, setGps] = useState<"off" | "loading" | "on" | "error">("off");
   const [gpsInfo, setGpsInfo] = useState<{ accuracy: number; threshold: number; updated: string } | null>(null);
@@ -265,6 +272,11 @@ export function PocketTrails() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setRaidRotation(Math.floor(Date.now() / 60_000)), 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   useEffect(() => () => {
     if (gpsWatchId.current !== null) navigator.geolocation.clearWatch(gpsWatchId.current);
     window.removeEventListener("deviceorientation", handleOrientation);
@@ -292,8 +304,9 @@ export function PocketTrails() {
   const caughtTotal = Object.values(save.caught).reduce((a, b) => a + b, 0);
   const discovered = Object.keys(save.caught).length;
   const worldSector = (mapOffset.y + WORLD_Y_LIMIT) * WORLD_COLUMNS + mapOffset.x + WORLD_X_LIMIT + 1;
-  const raidBoss = RAID_BOSSES[worldSector % RAID_BOSSES.length] || MONSTERS[0];
+  const raidBoss = RAID_BOSSES[(worldSector + raidRotation) % RAID_BOSSES.length] || MONSTERS[0];
   const ownedMonsters = MONSTERS.filter((monster) => (save.caught[monster.id] || 0) > 0);
+  const visibleDexMonsters = MONSTERS.filter((monster) => !monster.hidden || (save.caught[monster.id] || 0) > 0);
   const terrain = useMemo(() => {
     const seed = (mapOffset.x + WORLD_X_LIMIT + 1) * 1009 + (mapOffset.y + WORLD_Y_LIMIT + 1) * 9176;
     const random = (salt: number) => seededUnit(seed, salt);
@@ -441,14 +454,29 @@ export function PocketTrails() {
       if (caught) {
         const family = target.monster.family || target.monster.id;
         const candyReward = berryEffect === "pinap" ? 6 : 3;
+        const secretMonster = MONSTERS.find((monster) => monster.id === SECRET_MONSTER_ID);
+        const secretAppears = target.monster.id === SECRET_TRIGGER_ID
+          && Boolean(secretMonster)
+          && Math.random() < SECRET_APPEAR_CHANCE;
         setSave((s) => ({
           ...s,
           xp: s.xp + 20 + target.monster.rarity * 5,
           caught: { ...s.caught, [target.monster.id]: (s.caught[target.monster.id] || 0) + 1 },
           candies: { ...s.candies, [family]: (s.candies[family] || 0) + candyReward },
         }));
-        setSpawns((items) => items.filter((item) => item.key !== target.key));
-        setMessage(`${target.monster.name} 포획 성공!`);
+        setSpawns((items) => {
+          const remaining = items.filter((item) => item.key !== target.key);
+          if (!secretAppears || !secretMonster) return remaining;
+          return [...remaining, {
+            key: Date.now() + 31,
+            monster: secretMonster,
+            x: Math.max(12, Math.min(88, position.x + (Math.random() - .5) * 14)),
+            y: Math.max(14, Math.min(86, position.y + (Math.random() - .5) * 14)),
+          }];
+        });
+        setMessage(secretAppears
+          ? `${target.monster.name} 포획 성공! 근처에서 검푸른 불꽃이 느껴져요…`
+          : `${target.monster.name} 포획 성공!`);
         setSelected(null);
       } else {
         setMessage(timing.multiplier === 0
@@ -820,9 +848,9 @@ export function PocketTrails() {
 
           {tab === "dex" && (
             <div className="content-panel">
-              <div className="panel-heading"><span>FIELD NOTES</span><h1>탐험 도감</h1><p>{discovered} / {MONSTERS.length}종 발견</p></div>
+              <div className="panel-heading"><span>FIELD NOTES</span><h1>탐험 도감</h1><p>{discovered} / {visibleDexMonsters.length}종 발견</p></div>
               <div className="dex-grid">
-                {MONSTERS.map((monster) => {
+                {visibleDexMonsters.map((monster) => {
                   const count = save.caught[monster.id] || 0;
                   const family = monster.family || monster.id;
                   const candy = save.candies[family] || 0;
