@@ -78,6 +78,7 @@ export function PocketTrails() {
   const [monsterX, setMonsterX] = useState(0);
   const [throwX, setThrowX] = useState(0);
   const [timingLabel, setTimingLabel] = useState("중앙에 왔을 때 볼을 누르세요!");
+  const [ballMenuOpen, setBallMenuOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [gps, setGps] = useState<"off" | "loading" | "on" | "error">("off");
   const [gpsInfo, setGpsInfo] = useState<{ accuracy: number; threshold: number; updated: string } | null>(null);
@@ -185,6 +186,7 @@ export function PocketTrails() {
     }
     setMonsterX(92);
     setTimingLabel("중앙에 왔을 때 볼을 누르세요!");
+    setBallMenuOpen(false);
     setSelected(spawn);
   }
 
@@ -480,37 +482,54 @@ export function PocketTrails() {
 
         {selected && (
           <div className="encounter" style={{ "--accent": selected.monster.color } as React.CSSProperties}>
-            <button className="close-encounter" onClick={() => setSelected(null)}>×</button>
+            <button className="close-encounter" onClick={() => setSelected(null)} aria-label="포획 화면 닫기">×</button>
             <div className="encounter-sky"><i /><i /><i /></div>
+            <div className="encounter-hud">
+              <div><span>◉</span><b>{selected.monster.name}</b></div>
+              <strong>CP {Math.max(10, selected.monster.rarity * 110 + selected.key % 170)}</strong>
+              <TypeBadges type={selected.monster.type} />
+            </div>
             <div className="aim-zone" aria-hidden="true"><i /><span /></div>
             <div className="encounter-monster">
               <div style={{ "--monster-x": `${monsterX}px` } as React.CSSProperties}><MonsterSprite monster={selected.monster} /></div>
               <span style={{ "--monster-x": `${monsterX}px` } as React.CSSProperties} />
             </div>
             <div className={`timing-callout ${throwing ? "show" : ""}`}>{timingLabel}</div>
-            <section>
-              <TypeBadges type={selected.monster.type} />
-              <h1>{selected.monster.name}</h1>
-              <p>{selected.monster.description}</p>
-              <div className="catch-rate"><span>포획 난이도</span><i>{Array.from({length: 5}, (_, i) => <b key={i} className={i < selected.monster.rarity ? "on" : ""} />)}</i></div>
-              <div className="ball-picker">
+            {ballMenuOpen && (
+              <div className="encounter-ball-menu">
+                <span>사용할 볼</span>
                 {(Object.keys(BALLS) as BallKind[]).map((kind) => {
                   const ball = BALLS[kind];
-                  return <button key={kind} className={selectedBall === kind ? "active" : ""} onClick={() => setSelectedBall(kind)}>
+                  return <button
+                    key={kind}
+                    className={selectedBall === kind ? "active" : ""}
+                    onClick={() => { setSelectedBall(kind); setBallMenuOpen(false); }}
+                    disabled={!(save[ball.key] || 0)}
+                  >
                     <span className={`ball-icon ${kind}`} /><b>{ball.name}</b><small>{save[ball.key] || 0}개</small>
                   </button>;
                 })}
               </div>
-            </section>
-            <button
-              className={`throw ${throwing ? "throwing" : ""}`}
-              style={{ "--throw-x": `${throwX}px` } as React.CSSProperties}
-              onClick={throwBall}
-              disabled={!(save[BALLS[selectedBall].key] || 0) || throwing}
-              aria-label={`${BALLS[selectedBall].name} 던지기`}
-            >
-              <span className={`ball-icon ${selectedBall}`} /><b>{throwing ? "포획 중..." : `${BALLS[selectedBall].name} 던지기`}</b><small>{save[BALLS[selectedBall].key] || 0}개 남음</small>
-            </button>
+            )}
+            <div className="catch-controls">
+              <button className="encounter-item" onClick={() => {
+                setMessage("열매 아이템은 다음 업데이트에서 사용할 수 있어요!");
+                setTimeout(() => setMessage(""), 1600);
+              }} aria-label="열매">🍓</button>
+              <button
+                className={`throw ${throwing ? "throwing" : ""}`}
+                style={{ "--throw-x": `${throwX}px` } as React.CSSProperties}
+                onClick={throwBall}
+                disabled={!(save[BALLS[selectedBall].key] || 0) || throwing}
+                aria-label={`${BALLS[selectedBall].name} 던지기`}
+              >
+                <span className={`ball-icon ${selectedBall}`} />
+                <small>{save[BALLS[selectedBall].key] || 0}</small>
+              </button>
+              <button className="encounter-item ball-bag" onClick={() => setBallMenuOpen((open) => !open)} aria-label="볼 선택">
+                <span className={`ball-icon ${selectedBall}`} />
+              </button>
+            </div>
           </div>
         )}
         {loaded && !save.starter && (
