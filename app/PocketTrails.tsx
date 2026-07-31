@@ -22,10 +22,13 @@ const stopPoints = [
 
 function MonsterSprite({ monster }: { monster: Monster }) {
   const isImage = monster.sprite.startsWith("/") || monster.sprite.startsWith("http");
+  const imageSrc = monster.sprite.startsWith("/")
+    ? `${import.meta.env.BASE_URL || "/"}${monster.sprite.slice(1)}`
+    : monster.sprite;
   return isImage
     ? <span className="monster-image-wrap">
         <span className="monster-image-fallback">?</span>
-        <img className="monster-image" src={monster.sprite} alt={monster.name} draggable={false}
+        <img className="monster-image" src={imageSrc} alt={monster.name} draggable={false}
           onError={(event) => { event.currentTarget.style.display = "none"; }} />
       </span>
     : <span aria-label={monster.name}>{monster.sprite}</span>;
@@ -91,7 +94,7 @@ export function PocketTrails() {
     }
     setSpawns(createSpawns());
     setLoaded(true);
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register(`${import.meta.env.BASE_URL || "/"}sw.js`).catch(() => {});
   }, []);
 
   useEffect(() => {

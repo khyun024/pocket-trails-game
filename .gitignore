@@ -6,3 +6,4 @@ dist/
 tools/cloudflared.exe
 tunnel-output.txt
 tunnel-error.txt
+pages-dist/
