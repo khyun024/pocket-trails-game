@@ -119,7 +119,10 @@ export function PocketTrails() {
   const [selectedBall, setSelectedBall] = useState<BallKind>("basic");
   const [monsterX, setMonsterX] = useState(0);
   const [throwX, setThrowX] = useState(0);
-  const [timingLabel, setTimingLabel] = useState("중앙에 왔을 때 볼을 누르세요!");
+  const [throwY, setThrowY] = useState(-270);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [draggingBall, setDraggingBall] = useState(false);
+  const [timingLabel, setTimingLabel] = useState("몬스터볼을 위로 쓸어 올리세요!");
   const [ballMenuOpen, setBallMenuOpen] = useState(false);
   const [berryMenuOpen, setBerryMenuOpen] = useState(false);
   const [berryEffect, setBerryEffect] = useState<BerryKind | null>(null);
@@ -135,6 +138,7 @@ export function PocketTrails() {
   const heading = useRef(0);
   const lastMotionStep = useRef(0);
   const previousForce = useRef(9.8);
+  const throwStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("pocket-trails-save");
@@ -289,17 +293,18 @@ export function PocketTrails() {
       return;
     }
     setMonsterX(92);
-    setTimingLabel("중앙에 왔을 때 볼을 누르세요!");
+    setTimingLabel("몬스터볼을 위로 쓸어 올리세요!");
     setBallMenuOpen(false);
     setBerryMenuOpen(false);
     setBerryEffect(null);
     setSelected(spawn);
   }
 
-  function throwBall() {
+  function throwBall(swipe: { dx: number; upward: number }) {
     const ball = BALLS[selectedBall];
     if (!selected || (save[ball.key] || 0) < 1 || throwing) return;
-    const timingDistance = Math.abs(monsterX);
+    const trajectoryX = Math.max(-115, Math.min(115, swipe.dx * 1.55));
+    const timingDistance = Math.abs(monsterX - trajectoryX) + Math.abs(swipe.upward - 125) * .22;
     const timing = timingDistance <= 10
       ? { label: "EXCELLENT!", multiplier: 1.8 }
       : timingDistance <= 25
@@ -307,7 +312,8 @@ export function PocketTrails() {
         : timingDistance <= 48
           ? { label: "NICE!", multiplier: 1 }
           : { label: "빗나감!", multiplier: 0 };
-    setThrowX(monsterX);
+    setThrowX(trajectoryX);
+    setThrowY(-Math.max(215, Math.min(340, 190 + swipe.upward * .65)));
     setTimingLabel(timing.label);
     setThrowing(true);
     setSave((s) => ({ ...s, [ball.key]: Math.max(0, (s[ball.key] || 0) - 1) }));
@@ -335,9 +341,48 @@ export function PocketTrails() {
       }
       setBerryEffect(null);
       setThrowing(false);
-      setTimingLabel("중앙에 왔을 때 볼을 누르세요!");
+      setTimingLabel("몬스터볼을 위로 쓸어 올리세요!");
       setTimeout(() => setMessage(""), 2100);
     }, 900);
+  }
+
+  function beginBallSwipe(event: React.PointerEvent<HTMLButtonElement>) {
+    if (throwing || !(save[BALLS[selectedBall].key] || 0)) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    throwStart.current = { x: event.clientX, y: event.clientY };
+    setDragOffset({ x: 0, y: 0 });
+    setDraggingBall(true);
+    setTimingLabel("위로 빠르게 던지세요!");
+  }
+
+  function moveBallSwipe(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!throwStart.current) return;
+    event.preventDefault();
+    setDragOffset({
+      x: Math.max(-85, Math.min(85, event.clientX - throwStart.current.x)),
+      y: Math.max(-150, Math.min(8, event.clientY - throwStart.current.y)),
+    });
+  }
+
+  function endBallSwipe(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!throwStart.current) return;
+    const dx = event.clientX - throwStart.current.x;
+    const upward = throwStart.current.y - event.clientY;
+    throwStart.current = null;
+    setDraggingBall(false);
+    setDragOffset({ x: 0, y: 0 });
+    if (upward < 45) {
+      setTimingLabel("더 길게 위로 쓸어 올리세요!");
+      return;
+    }
+    throwBall({ dx, upward });
+  }
+
+  function cancelBallSwipe() {
+    throwStart.current = null;
+    setDraggingBall(false);
+    setDragOffset({ x: 0, y: 0 });
+    setTimingLabel("몬스터볼을 위로 쓸어 올리세요!");
   }
 
   function useBerry(kind: BerryKind) {
@@ -382,7 +427,7 @@ export function PocketTrails() {
   function finishRaid() {
     setRaidOpen(false);
     setMonsterX(92);
-    setTimingLabel("레이드 보상 포획! 중앙을 노리세요.");
+    setTimingLabel("레이드 보상 포획! 볼을 위로 던지세요.");
     setBerryEffect(null);
     setSelected({ key: Date.now(), monster: raidBoss, x: position.x, y: position.y });
     setMessage(`${raidBoss.name} 레이드 승리! 포획 기회 획득!`);
@@ -742,16 +787,31 @@ export function PocketTrails() {
                 })}
               </div>
             )}
+            <div className="swipe-guide"><i>↑</i><span>볼을 잡고 위로 스와이프</span></div>
             <div className="catch-controls">
               <button className="encounter-item" onClick={() => { setBerryMenuOpen((open) => !open); setBallMenuOpen(false); }} aria-label="열매 선택">
                 {berryEffect ? BERRIES[berryEffect].icon : "🍓"}
               </button>
               <button
-                className={`throw ${throwing ? "throwing" : ""}`}
-                style={{ "--throw-x": `${throwX}px` } as React.CSSProperties}
-                onClick={throwBall}
+                className={`throw ${throwing ? "throwing" : ""} ${draggingBall ? "dragging" : ""}`}
+                style={{
+                  "--throw-x": `${throwX}px`,
+                  "--throw-y": `${throwY}px`,
+                  "--drag-x": `${dragOffset.x}px`,
+                  "--drag-y": `${dragOffset.y}px`,
+                } as React.CSSProperties}
+                onPointerDown={beginBallSwipe}
+                onPointerMove={moveBallSwipe}
+                onPointerUp={endBallSwipe}
+                onPointerCancel={cancelBallSwipe}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    throwBall({ dx: 0, upward: 125 });
+                  }
+                }}
                 disabled={!(save[BALLS[selectedBall].key] || 0) || throwing}
-                aria-label={`${BALLS[selectedBall].name} 던지기`}
+                aria-label={`${BALLS[selectedBall].name}을 위로 스와이프해서 던지기`}
               >
                 <span className={`ball-icon ${selectedBall}`} />
                 <small>{save[BALLS[selectedBall].key] || 0}</small>
