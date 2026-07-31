@@ -75,6 +75,7 @@ export function PocketTrails() {
   const [message, setMessage] = useState("");
   const [throwing, setThrowing] = useState(false);
   const [selectedBall, setSelectedBall] = useState<BallKind>("basic");
+  const [encounterThrows, setEncounterThrows] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [gps, setGps] = useState<"off" | "loading" | "on" | "error">("off");
   const [gpsInfo, setGpsInfo] = useState<{ accuracy: number; threshold: number; updated: string } | null>(null);
@@ -163,6 +164,7 @@ export function PocketTrails() {
       setTimeout(() => setMessage(""), 1800);
       return;
     }
+    setEncounterThrows(0);
     setSelected(spawn);
   }
 
@@ -172,9 +174,12 @@ export function PocketTrails() {
     setThrowing(true);
     setSave((s) => ({ ...s, [ball.key]: Math.max(0, (s[ball.key] || 0) - 1) }));
     const target = selected;
+    const nextThrow = encounterThrows + 1;
+    setEncounterThrows(nextThrow);
     setTimeout(() => {
       const baseRate = target.monster.catchRate ?? Math.max(.25, .86 - target.monster.rarity * .09);
-      const caught = Math.random() < Math.min(.96, baseRate * ball.bonus);
+      const minimumMet = nextThrow >= (target.monster.minThrows || 1);
+      const caught = minimumMet && Math.random() < Math.min(.96, baseRate * ball.bonus);
       if (caught) {
         setSave((s) => ({
           ...s,
@@ -185,7 +190,10 @@ export function PocketTrails() {
         setMessage(`${target.monster.name} 포획 성공!`);
         setSelected(null);
       } else {
-        setMessage(`${target.monster.name}이(가) 볼에서 빠져나왔어요!`);
+        const remaining = Math.max(0, (target.monster.minThrows || 1) - nextThrow);
+        setMessage(remaining > 0
+          ? `${target.monster.name}은(는) 아직 꿈쩍도 하지 않아요 · 최소 ${remaining}회 더!`
+          : `${target.monster.name}이(가) 볼에서 빠져나왔어요!`);
       }
       setThrowing(false);
       setTimeout(() => setMessage(""), 2100);
@@ -449,10 +457,12 @@ export function PocketTrails() {
             <div className="encounter-sky"><i /><i /><i /></div>
             <div className="encounter-monster"><div><MonsterSprite monster={selected.monster} /></div><span /></div>
             <section>
+              {selected.monster.legendary && <div className="legendary-badge">★ LEGENDARY</div>}
               <TypeBadges type={selected.monster.type} />
               <h1>{selected.monster.name}</h1>
               <p>{selected.monster.description}</p>
               <div className="catch-rate"><span>포획 난이도</span><i>{Array.from({length: 5}, (_, i) => <b key={i} className={i < selected.monster.rarity ? "on" : ""} />)}</i></div>
+              {selected.monster.minThrows && <div className="throw-rule">투척 {encounterThrows}회 · 최소 {selected.monster.minThrows}회 필요</div>}
               <div className="ball-picker">
                 {(Object.keys(BALLS) as BallKind[]).map((kind) => {
                   const ball = BALLS[kind];

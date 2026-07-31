@@ -8,6 +8,9 @@ export type Monster = {
   type: string;
   color: string;
   rarity: number;
+  catchRate?: number;
+  minThrows?: number;
+  legendary?: boolean;
   description: string;
 };
 
@@ -24,16 +27,18 @@ export const MONSTERS: Monster[] = [
   { id: "monster-010", name: "리자드", sprite: "/monsters/리자드.png", type: "불꽃", color: "#f07a4d", rarity: 5, description: "강한 적과 싸움을 거듭하다 흥분하면 푸르스름한 불꽃을 뿜어낼 때가 있다." },
   { id: "monster-011", name: "어니부기", sprite: "/monsters/어니부기.png", type: "물", color: "#57aee8", rarity: 5, description: "딱 하고 머리를 맞을 때 등껍질로 숨어서 피한다. 하지만 꼬리가 살짝 삐져나와 있다." },
   { id: "monster-012", name: "포니타", sprite: "/monsters/포니타.png", type: "불꽃", color: "#f07a4d", rarity: 3, description: "매우 높이 점프한 후 착지할 때의 충격은 발굽과 다리의 근육으로 완화시킨다." },
-  { id: "monster-013", name: "독침붕", sprite: "/monsters/독침붕.png", type: "벌레", color: "#8fba58", rarity: 5, description: "양손과 엉덩이에 있는 3개의 독침으로 상대를 찌르고 찌르고 또 찌르며 공격한다." },
+  { id: "monster-013", name: "독침붕", sprite: "/monsters/독침붕.png", type: "벌레", color: "#8fba58", rarity: 5, catchRate: 0.08, minThrows: 3, description: "양손과 엉덩이에 있는 3개의 독침으로 상대를 찌르고 찌르고 또 찌르며 공격한다." },
   { id: "monster-014", name: "깨비참", sprite: "/monsters/깨비참.png", type: "비행", color: "#84b9d8", rarity: 1, description: "높이 나는 것이 서투르다. 세력권을 지키기 위해 맹스피드로 날아다닌다." },
   { id: "monster-015", name: "삐삐", sprite: "/monsters/삐삐.png", type: "페어리", color: "##d985ba", rarity: 2, description: "모습과 행동이 사랑스러워서 인기가 높지만 수가 적어서인지 좀처럼 발견되지 않는다." },
   { id: "monster-016", name: "캐이시", sprite: "/monsters/캐이시.png", type: "에스퍼", color: "#c982c0", rarity: 2, description: "하루에 18시간을 잔다. 위험이 닥치면 자는 상태로 순간이동해서 도망친다." },
   { id: "monster-017", name: "파르셀", sprite: "/monsters/파르셀.png", type: "물/얼음", color: "#72cbd5", rarity: 4, description: "다이아몬드보다 딱딱한 껍질로 방어할 뿐 아니라 몸에 붙은 가시를 발사하므로 꽤나 벅차다." },
-  { id: "monster-018", name: "팬텀", sprite: "/monsters/팬텀.png", type: "고스트/독", color: "#7d6aad", rarity: 5, description: "갑자기 한기를 느꼈다면 팬텀이 가까이 있는 것이다. 어쩌면 저주를 걸지도 모른다." },
-  { id: "monster-019", name: "망나뇽", sprite: "/monsters/망나뇽.png", type: "드래곤/비행", color: "#6d72cf", rarity: 5, description: "넓은 바다 어딘가를 거처로 삼아 날아 이동한다고 하지만 어디까지나 소문에 지나지 않는다." },
-  { id: "monster-020", name: "뮤츠", sprite: "/monsters/뮤츠.png", type: "에스퍼", color: "#8799a1", rarity: 5, description: "뮤와 유전자가 완전 같다. 하지만 크기도 성격도 무서울 정도로 다르다." },
+  { id: "monster-018", name: "팬텀", sprite: "/monsters/팬텀.png", type: "고스트/독", color: "#7d6aad", rarity: 5, catchRate: 0.08, minThrows: 3, description: "갑자기 한기를 느꼈다면 팬텀이 가까이 있는 것이다. 어쩌면 저주를 걸지도 모른다." },
+  { id: "monster-019", name: "망나뇽", sprite: "/monsters/망나뇽.png", type: "드래곤/비행", color: "#6d72cf", rarity: 5, catchRate: 0.05, minThrows: 5, description: "넓은 바다 어딘가를 거처로 삼아 날아 이동한다고 하지만 어디까지나 소문에 지나지 않는다." },
+  { id: "monster-020", name: "뮤츠", sprite: "/monsters/뮤츠.png", type: "에스퍼", color: "#8799a1", rarity: 5, catchRate: 0.01, minThrows: 10, legendary: true, description: "뮤와 유전자가 완전 같다. 하지만 크기도 성격도 무서울 정도로 다르다." },
 ];
 
 // 이미지 사용 예시:
 // { id: "my-monster", name: "내 몬스터", sprite: "/monsters/my-monster.png",
 //   type: "불꽃", color: "#ff7657", rarity: 2, description: "설명" }
+//
+// 전설급 예시: catchRate: 0.01, minThrows: 10, legendary: true
