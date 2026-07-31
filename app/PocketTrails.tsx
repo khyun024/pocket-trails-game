@@ -6,7 +6,6 @@ import { MONSTERS, type Monster } from "./monster-data";
 type Spawn = { key: number; monster: Monster; x: number; y: number };
 type Save = { caught: Record<string, number>; balls: number; greatBalls?: number; ultraBalls?: number; xp: number; steps: number; starter?: string };
 type BallKind = "basic" | "great" | "ultra";
-type KoreaMapView = { name: string; bbox: string; marker: [number, number] };
 
 const initialSave: Save = { caught: {}, balls: 30, greatBalls: 10, ultraBalls: 3, xp: 0, steps: 0 };
 const BALLS = {
@@ -15,17 +14,11 @@ const BALLS = {
   ultra: { name: "하이퍼볼", key: "ultraBalls" as const, bonus: 1.25 },
 };
 const spawnPoints = [
-  [17, 24], [72, 18], [84, 42], [31, 67], [67, 74], [12, 82],
+  [34, 22], [66, 30], [43, 48], [62, 58], [29, 68], [70, 77], [25, 89],
 ] as const;
 const stopPoints = [
-  [13, 44], [78, 25], [42, 19], [88, 68], [24, 76], [57, 57], [72, 86],
+  [28, 25], [40, 35], [67, 38], [42, 52], [59, 61], [29, 70], [70, 78], [25, 88],
 ] as const;
-const KOREA_MAPS: KoreaMapView[] = [
-  { name: "대한민국", bbox: "124.2,32.8,132.0,39.3", marker: [36.35, 127.8] },
-  { name: "서울", bbox: "126.72,37.40,127.22,37.72", marker: [37.5665, 126.978] },
-  { name: "부산", bbox: "128.78,34.98,129.35,35.35", marker: [35.1796, 129.0756] },
-  { name: "제주", bbox: "126.05,33.10,127.05,33.65", marker: [33.4996, 126.5312] },
-];
 
 function MonsterSprite({ monster }: { monster: Monster }) {
   const isImage = monster.sprite.startsWith("/") || monster.sprite.startsWith("http");
@@ -83,9 +76,7 @@ export function PocketTrails() {
   const [position, setPosition] = useState({ x: 49, y: 53 });
   const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
   const [selected, setSelected] = useState<Spawn | null>(null);
-  const [tab, setTab] = useState<"map" | "korea" | "dex" | "bag">("map");
-  const [koreaMap, setKoreaMap] = useState<KoreaMapView>(KOREA_MAPS[0]);
-  const [gpsPosition, setGpsPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [tab, setTab] = useState<"map" | "dex" | "bag">("map");
   const [message, setMessage] = useState("");
   const [throwing, setThrowing] = useState(false);
   const [selectedBall, setSelectedBall] = useState<BallKind>("basic");
@@ -337,7 +328,6 @@ export function PocketTrails() {
     if (gpsWatchId.current !== null) return;
     gpsWatchId.current = navigator.geolocation.watchPosition(({ coords }) => {
       const current = { lat: coords.latitude, lng: coords.longitude };
-      setGpsPosition(current);
       const movementThreshold = 0.5;
       setGpsInfo({
         accuracy: Math.round(coords.accuracy),
@@ -396,12 +386,16 @@ export function PocketTrails() {
 
         <section className={`game-view ${tab !== "map" ? "panel-view" : ""}`}>
           {tab === "map" && (
-            <div className="map" aria-label="탐험 지도">
-              <div className="map-shade" style={{ backgroundPosition: `${mapOffset.x * 95}px ${mapOffset.y * 75}px` }} />
-              <div className="park park-a">느티 공원</div>
-              <div className="park park-b">새봄 쉼터</div>
-              <div className="water" />
-              <div className="road road-a" /><div className="road road-b" /><div className="road road-c" />
+            <div className="map korea-game-map" aria-label="대한민국 탐험 지도">
+              <iframe
+                className="korea-map-background"
+                title="대한민국 전체 지도"
+                src="https://www.openstreetmap.org/export/embed.html?bbox=124.2%2C32.8%2C132.0%2C39.3&layer=mapnik"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <div className="korea-map-overlay" />
+              <div className="korea-map-label"><b>대한민국</b><span>전국 탐험 지도</span></div>
               {stopPoints.map(([x, y], index) => (
                 <button key={`${mapOffset.x}-${mapOffset.y}-${index}`} className="stop" style={{ left: `${x}%`, top: `${y}%` }} onClick={refill} aria-label="포켓스탑">◈</button>
               ))}
@@ -448,38 +442,6 @@ export function PocketTrails() {
             </div>
           )}
 
-          {tab === "korea" && (
-            <div className="korea-map-view">
-              <div className="korea-heading">
-                <span>KOREA EXPLORER MAP</span>
-                <h1>대한민국 지도</h1>
-                <p>지역 버튼을 눌러 실제 지도를 확대해 보세요.</p>
-              </div>
-              <div className="korea-region-buttons">
-                {KOREA_MAPS.map((view) => (
-                  <button key={view.name} className={koreaMap.name === view.name ? "active" : ""} onClick={() => setKoreaMap(view)}>
-                    {view.name}
-                  </button>
-                ))}
-                {gpsPosition && (
-                  <button onClick={() => setKoreaMap({
-                    name: "내 위치",
-                    bbox: `${gpsPosition.lng - .12},${gpsPosition.lat - .08},${gpsPosition.lng + .12},${gpsPosition.lat + .08}`,
-                    marker: [gpsPosition.lat, gpsPosition.lng],
-                  })}>내 위치</button>
-                )}
-              </div>
-              <div className="korea-map-frame">
-                <iframe
-                  title={`${koreaMap.name} 실제 지도`}
-                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(koreaMap.bbox)}&layer=mapnik&marker=${koreaMap.marker[0]}%2C${koreaMap.marker[1]}`}
-                  loading="lazy"
-                />
-                <span>지도 데이터 © OpenStreetMap 기여자</span>
-              </div>
-            </div>
-          )}
-
           {tab === "dex" && (
             <div className="content-panel">
               <div className="panel-heading"><span>FIELD NOTES</span><h1>탐험 도감</h1><p>{discovered} / {MONSTERS.length}종 발견</p></div>
@@ -523,7 +485,6 @@ export function PocketTrails() {
 
         <nav className="bottom-nav">
           <button className={tab === "map" ? "active" : ""} onClick={() => setTab("map")}><i>⌖</i><span>지도</span></button>
-          <button className={tab === "korea" ? "active" : ""} onClick={() => setTab("korea")}><i>🇰🇷</i><span>대한민국</span></button>
           <button className={tab === "dex" ? "active" : ""} onClick={() => setTab("dex")}><i>▦</i><span>도감</span></button>
           <button className={tab === "bag" ? "active" : ""} onClick={() => setTab("bag")}><i>◉</i><span>가방</span></button>
         </nav>

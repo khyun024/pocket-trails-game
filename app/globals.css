@@ -16,6 +16,10 @@ button:focus-visible { outline:3px solid #ffb640; outline-offset:2px; }
 .weather small { font-size:10px; font-weight:700; }
 .game-view { height:calc(100% - 74px); }
 .map { position:relative; width:100%; height:100%; overflow:hidden; background:#e6e1ce; }
+.korea-game-map { background:#dce8dc; }
+.korea-map-background { position:absolute; z-index:0; inset:-12%; width:124%; height:124%; border:0; pointer-events:none; filter:saturate(.82) contrast(.92); }
+.korea-map-overlay { position:absolute; z-index:1; inset:0; background:linear-gradient(#e8f4e830,#dafa7818),radial-gradient(circle at 50% 45%,transparent 0 32%,#17342e10 80%); pointer-events:none; }
+.korea-map-label { position:absolute; z-index:7; left:18px; top:82px; display:flex; flex-direction:column; padding:9px 12px; border-left:4px solid #e54848; border-radius:0 11px 11px 0; background:#fffdf4e8; box-shadow:0 5px 16px #17342e20; backdrop-filter:blur(7px); }.korea-map-label b { font-size:14px; }.korea-map-label span { color:#687f77; font-size:8px; font-weight:700; }
 .map-shade { position:absolute; inset:0; background:linear-gradient(28deg,transparent 30%,#d7e7d0 31% 50%,transparent 51%),repeating-linear-gradient(78deg,transparent 0 70px,#d4cdb7 71px 73px,transparent 74px 150px); opacity:.72; }
 .road { position:absolute; width:130%; height:76px; left:-15%; background:#faf7e9; border:2px solid #ded9c6; box-shadow:0 0 0 10px #ebe5d4; }
 .road-a { top:42%; transform:rotate(-13deg); }.road-b { top:18%; transform:rotate(58deg); }.road-c { top:78%; transform:rotate(18deg); }
@@ -55,10 +59,6 @@ button:focus-visible { outline:3px solid #ffb640; outline-offset:2px; }
 .bottom-nav button { width:25%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:0; background:none; color:#83958f; cursor:pointer; }
 .bottom-nav i { font-style:normal; font-size:23px; line-height:1; }.bottom-nav span { font-size:10px; font-weight:700; }.bottom-nav .active { color:var(--green); }.bottom-nav .active i { transform:translateY(-2px); }
 .panel-view { padding-top:76px; overflow:auto; background:#f5f3ea; }
-.korea-map-view { min-height:100%; padding:19px 16px 96px; background:linear-gradient(160deg,#eef4e5,#e9f3f1); }
-.korea-heading span { color:#e24c4b; font-size:8px; font-weight:900; letter-spacing:.18em; }.korea-heading h1 { margin:4px 0 2px; font:34px "Black Han Sans"; }.korea-heading p { margin:0 0 14px; color:#6e847b; font-size:10px; }
-.korea-region-buttons { display:flex; gap:6px; overflow-x:auto; padding:1px 1px 10px; scrollbar-width:none; }.korea-region-buttons::-webkit-scrollbar { display:none; }.korea-region-buttons button { flex:0 0 auto; padding:8px 12px; border:1px solid #d3ddd4; border-radius:99px; background:#fff; color:#526a61; font-size:9px; font-weight:800; cursor:pointer; }.korea-region-buttons button.active { border-color:#17342e; background:#17342e; color:#dafa78; }
-.korea-map-frame { position:relative; height:calc(100vh - 260px); min-height:390px; overflow:hidden; border:4px solid white; border-radius:24px; background:#d8e5d6; box-shadow:0 12px 35px #17342e25; }.korea-map-frame iframe { width:100%; height:100%; border:0; }.korea-map-frame>span { position:absolute; left:9px; bottom:8px; padding:4px 7px; border-radius:7px; background:#ffffffe6; color:#597068; font-size:7px; pointer-events:none; }
 .content-panel { min-height:100%; padding:20px 18px 40px; }
 .panel-heading span { color:var(--green); font-size:9px; font-weight:800; letter-spacing:.2em; }.panel-heading h1 { margin:3px 0 2px; font:38px "Black Han Sans"; letter-spacing:-.04em; }.panel-heading p { margin:0 0 22px; color:#72877f; font-size:12px; }
 .dex-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; padding-bottom:30px; }
