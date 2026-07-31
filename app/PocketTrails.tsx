@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MONSTERS, type Monster } from "./monster-data";
 import { BattleArena } from "./BattleArena";
+import { RaidBattle } from "./RaidBattle";
 
 type Spawn = { key: number; monster: Monster; x: number; y: number };
 type Save = {
@@ -112,7 +113,7 @@ export function PocketTrails() {
   const [position, setPosition] = useState({ x: 49, y: 53 });
   const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
   const [selected, setSelected] = useState<Spawn | null>(null);
-  const [tab, setTab] = useState<"map" | "dex" | "battle" | "bag">("map");
+  const [tab, setTab] = useState<"map" | "dex" | "box" | "battle" | "bag">("map");
   const [message, setMessage] = useState("");
   const [throwing, setThrowing] = useState(false);
   const [selectedBall, setSelectedBall] = useState<BallKind>("basic");
@@ -123,9 +124,6 @@ export function PocketTrails() {
   const [berryMenuOpen, setBerryMenuOpen] = useState(false);
   const [berryEffect, setBerryEffect] = useState<BerryKind | null>(null);
   const [raidOpen, setRaidOpen] = useState(false);
-  const [raidHp, setRaidHp] = useState(100);
-  const [raidTime, setRaidTime] = useState(30);
-  const [raidAttacking, setRaidAttacking] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [gps, setGps] = useState<"off" | "loading" | "on" | "error">("off");
   const [gpsInfo, setGpsInfo] = useState<{ accuracy: number; threshold: number; updated: string } | null>(null);
@@ -190,20 +188,6 @@ export function PocketTrails() {
     animationFrame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrame);
   }, [selected, throwing, berryEffect]);
-
-  useEffect(() => {
-    if (!raidOpen || raidHp <= 0 || raidTime <= 0) return;
-    const timer = window.setInterval(() => setRaidTime((time) => Math.max(0, time - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, [raidOpen, raidHp, raidTime]);
-
-  useEffect(() => {
-    if (raidOpen && raidTime === 0 && raidHp > 0) {
-      setRaidOpen(false);
-      setMessage("레이드 시간 초과! 다음에 다시 도전하세요.");
-      setTimeout(() => setMessage(""), 2200);
-    }
-  }, [raidOpen, raidTime, raidHp]);
 
   const level = Math.floor(save.xp / 100) + 1;
   const caughtTotal = Object.values(save.caught).reduce((a, b) => a + b, 0);
@@ -392,31 +376,17 @@ export function PocketTrails() {
       return;
     }
     setSave((current) => ({ ...current, raidPasses: current.raidPasses - 1 }));
-    setRaidHp(100);
-    setRaidTime(30);
     setRaidOpen(true);
   }
 
-  function attackRaid() {
-    if (raidAttacking || raidHp <= 0 || raidTime <= 0) return;
-    setRaidAttacking(true);
-    const damage = 8 + Math.floor(Math.random() * 8);
-    setRaidHp((hp) => {
-      const next = Math.max(0, hp - damage);
-      if (next === 0) {
-        setTimeout(() => {
-          setRaidOpen(false);
-          setMonsterX(92);
-          setTimingLabel("레이드 보상 포획! 중앙을 노리세요.");
-          setBerryEffect(null);
-          setSelected({ key: Date.now(), monster: raidBoss, x: position.x, y: position.y });
-          setMessage(`${raidBoss.name} 레이드 승리! 포획 기회 획득!`);
-          setTimeout(() => setMessage(""), 2200);
-        }, 650);
-      }
-      return next;
-    });
-    setTimeout(() => setRaidAttacking(false), 420);
+  function finishRaid() {
+    setRaidOpen(false);
+    setMonsterX(92);
+    setTimingLabel("레이드 보상 포획! 중앙을 노리세요.");
+    setBerryEffect(null);
+    setSelected({ key: Date.now(), monster: raidBoss, x: position.x, y: position.y });
+    setMessage(`${raidBoss.name} 레이드 승리! 포획 기회 획득!`);
+    setTimeout(() => setMessage(""), 2200);
   }
 
   function refill() {
@@ -674,6 +644,24 @@ export function PocketTrails() {
 
           {tab === "battle" && <BattleArena owned={ownedMonsters} />}
 
+          {tab === "box" && (
+            <div className="content-panel box-panel">
+              <div className="panel-heading"><span>POKÉMON STORAGE</span><h1>포켓몬 박스</h1><p>{caughtTotal} / 300마리 보관 중</p></div>
+              {ownedMonsters.length ? <div className="pokemon-box-grid">
+                {ownedMonsters.map((monster) => {
+                  const family = monster.family || monster.id;
+                  const candy = save.candies[family] || 0;
+                  const evolved = monster.evolvesTo ? MONSTERS.find((candidate) => candidate.id === monster.evolvesTo) : null;
+                  return <article key={monster.id}>
+                    <div className="box-sprite" style={{ background: `${monster.color}20` }}><MonsterSprite monster={monster} /></div>
+                    <section><TypeBadges type={monster.type} /><b>{monster.name}</b><span>보유 {save.caught[monster.id]}마리 · 🍬 {candy}</span></section>
+                    {evolved && monster.evolutionCost && <button onClick={() => evolve(monster)} disabled={candy < monster.evolutionCost}>{evolved.name} 진화</button>}
+                  </article>;
+                })}
+              </div> : <div className="box-empty"><span>◌</span><b>박스가 비어 있어요</b><p>지도에서 포켓몬을 잡아 보세요.</p></div>}
+            </div>
+          )}
+
           {tab === "bag" && (
             <div className="content-panel bag-panel">
               <div className="panel-heading"><span>EXPLORER KIT</span><h1>내 가방</h1><p>모험 기록은 이 기기에 자동 저장돼요.</p></div>
@@ -704,22 +692,12 @@ export function PocketTrails() {
         <nav className="bottom-nav">
           <button className={tab === "map" ? "active" : ""} onClick={() => setTab("map")}><i>⌖</i><span>지도</span></button>
           <button className={tab === "dex" ? "active" : ""} onClick={() => setTab("dex")}><i>▦</i><span>도감</span></button>
+          <button className={tab === "box" ? "active" : ""} onClick={() => setTab("box")}><i>▣</i><span>박스</span></button>
           <button className={tab === "battle" ? "active" : ""} onClick={() => setTab("battle")}><i>⚔</i><span>배틀</span></button>
           <button className={tab === "bag" ? "active" : ""} onClick={() => setTab("bag")}><i>◉</i><span>가방</span></button>
         </nav>
 
-        {raidOpen && (
-          <div className="raid-screen">
-            <button className="close-raid" onClick={() => setRaidOpen(false)}>×</button>
-            <div className="raid-title"><span>전설 레이드</span><h1>{raidBoss.name}</h1><b>{raidTime}초</b></div>
-            <div className="raid-boss"><MonsterSprite monster={raidBoss} /></div>
-            <div className="raid-hp"><span style={{ width: `${raidHp}%` }} /></div>
-            <p>화면 아래 공격 버튼을 빠르게 눌러 쓰러뜨리세요!</p>
-            <button className={`raid-attack ${raidAttacking ? "hit" : ""}`} onClick={attackRaid} disabled={raidHp <= 0 || raidTime <= 0}>
-              {raidHp <= 0 ? "승리!" : "공격"}
-            </button>
-          </div>
-        )}
+        {raidOpen && <RaidBattle boss={raidBoss} onClose={() => setRaidOpen(false)} onWin={finishRaid} />}
 
         {selected && (
           <div className="encounter" style={{ "--accent": selected.monster.color } as React.CSSProperties}>
