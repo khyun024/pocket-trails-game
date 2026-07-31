@@ -23,7 +23,7 @@ export const MONSTERS: Monster[] = [
   { id: "bubbloo", name: "꼬부기", sprite: "/monsters/꼬부기.png", type: "물", color: "#5ebcf6", rarity: 1, family: "bubbloo", evolvesTo: "monster-011", evolutionCost: 12, description: "수면에서 물을 분사하여 먹이를 잡는다. 위험해지면 등껍질에 손발을 감추고 몸을 지킨다." },
   { id: "voltbit", name: "피카츄", sprite: "/monsters/피카츄.png", type: "전기", color: "#f4cb3c", rarity: 2, description: "꼬리를 세워서 주변의 기척을 느낀다고 한다. 그래서 무턱대고 꼬리를 잡아당기면 물어버린다." },
   { id: "mothmoon", name: "캐터피", sprite: "/monsters/캐터피.png", type: "벌레", color: "#a884ff", rarity: 3, description: "머리끝에 있는 더듬이를 건드리면 강렬한 냄새를 내서 몸을 보호하려 한다." },
-  { id: "rockhorn", name: "꼬마돌", sprite: "/monsters/꼬마돌.png", type: "바위", color: "#b18b68", rarity: 3, description: "산길 등에 많이 서식한다. 실수로 밟으면 화를 내므로 주의가 필요하다." },
+  { id: "rockhorn", name: "꼬마돌", sprite: "/monsters/꼬마돌.png", type: "바위/땅", color: "#b18b68", rarity: 3, description: "산길 등에 많이 서식한다. 실수로 밟으면 화를 내므로 주의가 필요하다." },
   { id: "cloudle", name: "구구", sprite: "/monsters/구구.png", type: "노말/비행", color: "#84d8e9", rarity: 4, description: "얌전한 성격이라 습격당해도 반격하지 않고 모래를 뿌려서 몸을 지키는 경우가 많다." },
   { id: "starling", name: "별가사리", sprite: "/monsters/별가사리.png", type: "물", color: "#5ebcf6", rarity: 5, description: "몸의 중심 부분만 남아 있으면 아무리 잘게 잘려도 재생한다고 한다." },
   { id: "monster-009", name: "이상해풀", sprite: "/monsters/이상해풀.png", type: "풀/독", color: "#6fbd67", rarity: 5, family: "leaflet", evolvesTo: "monster-024", evolutionCost: 25, description: "양분을 흡수해서 커진 봉오리에서 향기가 나기 시작하면 곧 꽃이 핀다는 증거다." },
