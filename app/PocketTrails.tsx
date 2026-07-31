@@ -19,6 +19,10 @@ const spawnPoints = [
 const stopPoints = [
   [28, 25], [40, 35], [67, 38], [42, 52], [59, 61], [29, 70], [70, 78], [25, 88],
 ] as const;
+const WORLD_COLUMNS = 9;
+const WORLD_ROWS = 13;
+const WORLD_X_LIMIT = Math.floor(WORLD_COLUMNS / 2);
+const WORLD_Y_LIMIT = Math.floor(WORLD_ROWS / 2);
 
 function MonsterSprite({ monster }: { monster: Monster }) {
   const isImage = monster.sprite.startsWith("/") || monster.sprite.startsWith("http");
@@ -152,6 +156,8 @@ export function PocketTrails() {
   const level = Math.floor(save.xp / 100) + 1;
   const caughtTotal = Object.values(save.caught).reduce((a, b) => a + b, 0);
   const discovered = Object.keys(save.caught).length;
+  const worldSector = (mapOffset.y + WORLD_Y_LIMIT) * WORLD_COLUMNS + mapOffset.x + WORLD_X_LIMIT + 1;
+  const biome = Math.abs(mapOffset.x * 3 + mapOffset.y * 5) % 3;
 
   const nearby = useMemo(() => spawns.map((spawn) => ({
     ...spawn,
@@ -172,9 +178,21 @@ export function PocketTrails() {
         if (y > 91) { y = 9; mapY = 1; }
         if (y < 8) { y = 90; mapY = -1; }
         if (mapX || mapY) {
-          setMapOffset((offset) => ({ x: offset.x + mapX, y: offset.y + mapY }));
-          setSpawns(createSpawns());
-          setMessage("새로운 구역에 도착했어요!");
+          const nextX = mapOffset.x + mapX;
+          const nextY = mapOffset.y + mapY;
+          if (Math.abs(nextX) > WORLD_X_LIMIT || Math.abs(nextY) > WORLD_Y_LIMIT) {
+            if (mapX > 0) x = 94;
+            if (mapX < 0) x = 6;
+            if (mapY > 0) y = 91;
+            if (mapY < 0) y = 8;
+            setMessage("대한민국 탐험 지도의 끝에 도착했어요!");
+            setTimeout(() => setMessage(""), 1500);
+            return { x, y };
+          }
+          setMapOffset({ x: nextX, y: nextY });
+          setSpawns(createSpawns(Date.now() + nextX * 1000 + nextY * 10000));
+          const nextSector = (nextY + WORLD_Y_LIMIT) * WORLD_COLUMNS + nextX + WORLD_X_LIMIT + 1;
+          setMessage(`새로운 구역 ${nextSector} / ${WORLD_COLUMNS * WORLD_ROWS}`);
           setTimeout(() => setMessage(""), 1300);
         }
         return { x, y };
@@ -386,16 +404,15 @@ export function PocketTrails() {
 
         <section className={`game-view ${tab !== "map" ? "panel-view" : ""}`}>
           {tab === "map" && (
-            <div className="map korea-game-map" aria-label="대한민국 탐험 지도">
-              <iframe
-                className="korea-map-background"
-                title="대한민국 전체 지도"
-                src="https://www.openstreetmap.org/export/embed.html?bbox=124.2%2C32.8%2C132.0%2C39.3&layer=mapnik"
-                tabIndex={-1}
-                aria-hidden="true"
-              />
-              <div className="korea-map-overlay" />
-              <div className="korea-map-label"><b>대한민국</b><span>전국 탐험 지도</span></div>
+            <div className={`map biome-${biome}`} aria-label="이어지는 대형 탐험 지도">
+              <div className="map-shade" style={{ backgroundPosition: `${mapOffset.x * 95}px ${mapOffset.y * 75}px` }} />
+              <div className="park park-a" />
+              <div className="park park-b" />
+              <div className="water" style={{ right: `${8 + biome * 27}%` }} />
+              <div className="road road-a" style={{ translate: `${mapOffset.x * 9}px ${mapOffset.y * 3}px` }} />
+              <div className="road road-b" style={{ translate: `${mapOffset.y * -7}px ${mapOffset.x * 4}px` }} />
+              <div className="road road-c" style={{ translate: `${mapOffset.x * -6}px ${mapOffset.y * -4}px` }} />
+              <div className="world-sector"><b>{worldSector}</b><span>/ {WORLD_COLUMNS * WORLD_ROWS} 구역</span></div>
               {stopPoints.map(([x, y], index) => (
                 <button key={`${mapOffset.x}-${mapOffset.y}-${index}`} className="stop" style={{ left: `${x}%`, top: `${y}%` }} onClick={refill} aria-label="포켓스탑">◈</button>
               ))}
