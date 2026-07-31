@@ -192,8 +192,12 @@ export function PocketTrails() {
   const [monsterX, setMonsterX] = useState(0);
   const [throwX, setThrowX] = useState(0);
   const [throwY, setThrowY] = useState(-270);
+  const [throwMidX, setThrowMidX] = useState(0);
+  const [throwMidY, setThrowMidY] = useState(-150);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [draggingBall, setDraggingBall] = useState(false);
+  const [curveAngle, setCurveAngle] = useState(0);
+  const [throwSpinMid, setThrowSpinMid] = useState(560);
   const [throwSpinEnd, setThrowSpinEnd] = useState(1080);
   const [impacting, setImpacting] = useState(false);
   const [timingLabel, setTimingLabel] = useState("몬스터볼을 위로 쓸어 올리세요!");
@@ -212,7 +216,13 @@ export function PocketTrails() {
   const heading = useRef(0);
   const lastMotionStep = useRef(0);
   const previousForce = useRef(9.8);
-  const throwStart = useRef<{ x: number; y: number } | null>(null);
+  const throwStart = useRef<{
+    x: number;
+    y: number;
+    lastX: number;
+    horizontalTravel: number;
+    furthestX: number;
+  } | null>(null);
   const encounterMonsterSize = selected ? ENCOUNTER_SIZES[selected.monster.id] || 170 : 170;
   const encounterAimSize = Math.round(Math.max(90, Math.min(150, encounterMonsterSize * .66)));
 
@@ -376,10 +386,12 @@ export function PocketTrails() {
     setSelected(spawn);
   }
 
-  function throwBall(swipe: { dx: number; upward: number }) {
+  function throwBall(swipe: { dx: number; upward: number; angle?: number }) {
     const ball = BALLS[selectedBall];
     if (!selected || (save[ball.key] || 0) < 1 || throwing) return;
-    const trajectoryX = Math.max(-115, Math.min(115, swipe.dx * 1.55));
+    const angle = Math.max(-45, Math.min(45, swipe.angle || 0));
+    const angleRatio = angle / 45;
+    const trajectoryX = Math.max(-115, Math.min(115, swipe.dx * 1.25 + angleRatio * 38));
     const timingDistance = Math.abs(monsterX - trajectoryX) + Math.abs(swipe.upward - 125) * .22;
     const timing = timingDistance <= 10
       ? { label: "EXCELLENT!", multiplier: 1.8 }
@@ -391,8 +403,13 @@ export function PocketTrails() {
     const flightY = -Math.max(215, Math.min(340, 190 + swipe.upward * .65));
     setThrowX(trajectoryX);
     setThrowY(flightY);
-    setThrowSpinEnd(Math.max(900, Math.min(1600, 850 + swipe.upward * 4)));
-    setTimingLabel(timing.label);
+    setThrowMidX(trajectoryX * .5 + angleRatio * 68);
+    setThrowMidY(flightY * .5);
+    const spinDirection = angle ? Math.sign(angle) : 1;
+    const spinStrength = Math.max(900, Math.min(1800, 850 + swipe.upward * 4 + Math.abs(angle) * 8));
+    setThrowSpinMid(spinDirection * spinStrength * .5);
+    setThrowSpinEnd(spinDirection * spinStrength);
+    setTimingLabel(`${timing.label}${angle ? ` · CURVE ${Math.round(Math.abs(angle))}°` : ""}`);
     setThrowing(true);
     setSave((current) => ({
       ...current,
@@ -412,7 +429,8 @@ export function PocketTrails() {
     setTimeout(() => {
       const baseRate = target.monster.catchRate ?? Math.max(.25, .86 - target.monster.rarity * .09);
       const berryBonus = berryEffect === "razz" ? 1.5 : 1;
-      const caught = timing.multiplier > 0 && Math.random() < Math.min(.96, baseRate * ball.bonus * timing.multiplier * berryBonus);
+      const curveBonus = 1 + Math.abs(angleRatio) * .1;
+      const caught = timing.multiplier > 0 && Math.random() < Math.min(.96, baseRate * ball.bonus * timing.multiplier * berryBonus * curveBonus);
       if (caught) {
         const family = target.monster.family || target.monster.id;
         const candyReward = berryEffect === "pinap" ? 6 : 3;
@@ -441,40 +459,61 @@ export function PocketTrails() {
   function beginBallSwipe(event: React.PointerEvent<HTMLButtonElement>) {
     if (throwing || !(save[BALLS[selectedBall].key] || 0)) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    throwStart.current = { x: event.clientX, y: event.clientY };
+    throwStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      lastX: event.clientX,
+      horizontalTravel: 0,
+      furthestX: 0,
+    };
     setDragOffset({ x: 0, y: 0 });
+    setCurveAngle(0);
     setDraggingBall(true);
-    setTimingLabel("목표를 향해 위로 곧게 던지세요!");
+    setTimingLabel("좌우로 돌리면 최대 45° 커브!");
   }
 
   function moveBallSwipe(event: React.PointerEvent<HTMLButtonElement>) {
     if (!throwStart.current) return;
     event.preventDefault();
     const dx = event.clientX - throwStart.current.x;
+    const stepX = event.clientX - throwStart.current.lastX;
+    throwStart.current.lastX = event.clientX;
+    throwStart.current.horizontalTravel += Math.abs(stepX);
+    if (Math.abs(dx) > Math.abs(throwStart.current.furthestX)) throwStart.current.furthestX = dx;
+    const nextAngle = throwStart.current.horizontalTravel >= 24 && Math.abs(throwStart.current.furthestX) >= 14
+      ? Math.max(-45, Math.min(45, throwStart.current.furthestX * .75))
+      : 0;
+    setCurveAngle(nextAngle);
     setDragOffset({
       x: Math.max(-85, Math.min(85, dx)),
       y: Math.max(-150, Math.min(8, event.clientY - throwStart.current.y)),
     });
+    if (nextAngle) setTimingLabel(`커브 각도 ${Math.round(Math.abs(nextAngle))}° / 45°`);
   }
 
   function endBallSwipe(event: React.PointerEvent<HTMLButtonElement>) {
     if (!throwStart.current) return;
     const dx = event.clientX - throwStart.current.x;
     const upward = throwStart.current.y - event.clientY;
+    const angle = throwStart.current.horizontalTravel >= 24 && Math.abs(throwStart.current.furthestX) >= 14
+      ? Math.max(-45, Math.min(45, throwStart.current.furthestX * .75))
+      : 0;
     throwStart.current = null;
     setDraggingBall(false);
     setDragOffset({ x: 0, y: 0 });
+    setCurveAngle(0);
     if (upward < 45) {
       setTimingLabel("더 길게 위로 쓸어 올리세요!");
       return;
     }
-    throwBall({ dx, upward });
+    throwBall({ dx, upward, angle });
   }
 
   function cancelBallSwipe() {
     throwStart.current = null;
     setDraggingBall(false);
     setDragOffset({ x: 0, y: 0 });
+    setCurveAngle(0);
     setTimingLabel("몬스터볼을 위로 쓸어 올리세요!");
   }
 
@@ -889,18 +928,21 @@ export function PocketTrails() {
                 })}
               </div>
             )}
-            <div className="swipe-guide"><i>↑</i><span>목표를 향해 위로 곧게 던지기</span></div>
+            <div className="swipe-guide"><i>↝</i><span>회전 커브 최대 45°</span></div>
             <div className="catch-controls">
               <button className="encounter-item" onClick={() => { setBerryMenuOpen((open) => !open); setBallMenuOpen(false); }} aria-label="열매 선택">
                 {berryEffect ? BERRIES[berryEffect].icon : "🍓"}
               </button>
               <button
-                className={`throw ${throwing ? "throwing" : ""} ${draggingBall ? "dragging" : ""}`}
+                className={`throw ${throwing ? "throwing" : ""} ${draggingBall ? "dragging" : ""} ${curveAngle > 0 ? "curve-right" : curveAngle < 0 ? "curve-left" : ""}`}
                 style={{
                   "--throw-x": `${throwX}px`,
                   "--throw-y": `${throwY}px`,
+                  "--throw-mid-x": `${throwMidX}px`,
+                  "--throw-mid-y": `${throwMidY}px`,
                   "--drag-x": `${dragOffset.x}px`,
                   "--drag-y": `${dragOffset.y}px`,
+                  "--throw-spin-mid": `${throwSpinMid}deg`,
                   "--throw-spin-end": `${throwSpinEnd}deg`,
                 } as React.CSSProperties}
                 onPointerDown={beginBallSwipe}
