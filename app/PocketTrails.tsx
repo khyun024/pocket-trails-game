@@ -75,7 +75,9 @@ export function PocketTrails() {
   const [message, setMessage] = useState("");
   const [throwing, setThrowing] = useState(false);
   const [selectedBall, setSelectedBall] = useState<BallKind>("basic");
-  const [encounterThrows, setEncounterThrows] = useState(0);
+  const [monsterX, setMonsterX] = useState(0);
+  const [throwX, setThrowX] = useState(0);
+  const [timingLabel, setTimingLabel] = useState("중앙에 왔을 때 볼을 누르세요!");
   const [loaded, setLoaded] = useState(false);
   const [gps, setGps] = useState<"off" | "loading" | "on" | "error">("off");
   const [gpsInfo, setGpsInfo] = useState<{ accuracy: number; threshold: number; updated: string } | null>(null);
@@ -124,6 +126,23 @@ export function PocketTrails() {
     window.removeEventListener("devicemotion", handleMotion);
   }, []);
 
+  useEffect(() => {
+    if (!selected || throwing) return;
+    let animationFrame = 0;
+    const startedAt = performance.now();
+    const speed = 1.35 + selected.monster.rarity * 0.12;
+    let lastPaint = 0;
+    const animate = (now: number) => {
+      if (now - lastPaint > 30) {
+        setMonsterX(Math.sin((now - startedAt) / 1000 * speed + Math.PI / 2) * 92);
+        lastPaint = now;
+      }
+      animationFrame = requestAnimationFrame(animate);
+    };
+    animationFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [selected, throwing]);
+
   const level = Math.floor(save.xp / 100) + 1;
   const caughtTotal = Object.values(save.caught).reduce((a, b) => a + b, 0);
   const discovered = Object.keys(save.caught).length;
@@ -164,22 +183,30 @@ export function PocketTrails() {
       setTimeout(() => setMessage(""), 1800);
       return;
     }
-    setEncounterThrows(0);
+    setMonsterX(92);
+    setTimingLabel("중앙에 왔을 때 볼을 누르세요!");
     setSelected(spawn);
   }
 
   function throwBall() {
     const ball = BALLS[selectedBall];
     if (!selected || (save[ball.key] || 0) < 1 || throwing) return;
+    const timingDistance = Math.abs(monsterX);
+    const timing = timingDistance <= 10
+      ? { label: "EXCELLENT!", multiplier: 1.8 }
+      : timingDistance <= 25
+        ? { label: "GREAT!", multiplier: 1.35 }
+        : timingDistance <= 48
+          ? { label: "NICE!", multiplier: 1 }
+          : { label: "빗나감!", multiplier: 0 };
+    setThrowX(monsterX);
+    setTimingLabel(timing.label);
     setThrowing(true);
     setSave((s) => ({ ...s, [ball.key]: Math.max(0, (s[ball.key] || 0) - 1) }));
     const target = selected;
-    const nextThrow = encounterThrows + 1;
-    setEncounterThrows(nextThrow);
     setTimeout(() => {
       const baseRate = target.monster.catchRate ?? Math.max(.25, .86 - target.monster.rarity * .09);
-      const minimumMet = nextThrow >= (target.monster.minThrows || 1);
-      const caught = minimumMet && Math.random() < Math.min(.96, baseRate * ball.bonus);
+      const caught = timing.multiplier > 0 && Math.random() < Math.min(.96, baseRate * ball.bonus * timing.multiplier);
       if (caught) {
         setSave((s) => ({
           ...s,
@@ -190,12 +217,12 @@ export function PocketTrails() {
         setMessage(`${target.monster.name} 포획 성공!`);
         setSelected(null);
       } else {
-        const remaining = Math.max(0, (target.monster.minThrows || 1) - nextThrow);
-        setMessage(remaining > 0
-          ? `${target.monster.name}은(는) 아직 꿈쩍도 하지 않아요 · 최소 ${remaining}회 더!`
-          : `${target.monster.name}이(가) 볼에서 빠져나왔어요!`);
+        setMessage(timing.multiplier === 0
+          ? "타이밍이 어긋나 볼이 빗나갔어요!"
+          : `${timing.label} 하지만 ${target.monster.name}이(가) 빠져나왔어요!`);
       }
       setThrowing(false);
+      setTimingLabel("중앙에 왔을 때 볼을 누르세요!");
       setTimeout(() => setMessage(""), 2100);
     }, 900);
   }
@@ -455,14 +482,17 @@ export function PocketTrails() {
           <div className="encounter" style={{ "--accent": selected.monster.color } as React.CSSProperties}>
             <button className="close-encounter" onClick={() => setSelected(null)}>×</button>
             <div className="encounter-sky"><i /><i /><i /></div>
-            <div className="encounter-monster"><div><MonsterSprite monster={selected.monster} /></div><span /></div>
+            <div className="aim-zone" aria-hidden="true"><i /><span /></div>
+            <div className="encounter-monster">
+              <div style={{ "--monster-x": `${monsterX}px` } as React.CSSProperties}><MonsterSprite monster={selected.monster} /></div>
+              <span style={{ "--monster-x": `${monsterX}px` } as React.CSSProperties} />
+            </div>
+            <div className={`timing-callout ${throwing ? "show" : ""}`}>{timingLabel}</div>
             <section>
-              {selected.monster.legendary && <div className="legendary-badge">★ LEGENDARY</div>}
               <TypeBadges type={selected.monster.type} />
               <h1>{selected.monster.name}</h1>
               <p>{selected.monster.description}</p>
               <div className="catch-rate"><span>포획 난이도</span><i>{Array.from({length: 5}, (_, i) => <b key={i} className={i < selected.monster.rarity ? "on" : ""} />)}</i></div>
-              {selected.monster.minThrows && <div className="throw-rule">투척 {encounterThrows}회 · 최소 {selected.monster.minThrows}회 필요</div>}
               <div className="ball-picker">
                 {(Object.keys(BALLS) as BallKind[]).map((kind) => {
                   const ball = BALLS[kind];
@@ -472,7 +502,13 @@ export function PocketTrails() {
                 })}
               </div>
             </section>
-            <button className={`throw ${throwing ? "throwing" : ""}`} onClick={throwBall} disabled={!(save[BALLS[selectedBall].key] || 0)}>
+            <button
+              className={`throw ${throwing ? "throwing" : ""}`}
+              style={{ "--throw-x": `${throwX}px` } as React.CSSProperties}
+              onClick={throwBall}
+              disabled={!(save[BALLS[selectedBall].key] || 0) || throwing}
+              aria-label={`${BALLS[selectedBall].name} 던지기`}
+            >
               <span className={`ball-icon ${selectedBall}`} /><b>{throwing ? "포획 중..." : `${BALLS[selectedBall].name} 던지기`}</b><small>{save[BALLS[selectedBall].key] || 0}개 남음</small>
             </button>
           </div>
