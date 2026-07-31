@@ -267,11 +267,11 @@ export function PocketTrails() {
     if (!selected || throwing) return;
     let animationFrame = 0;
     const startedAt = performance.now();
-    const speed = (1.35 + selected.monster.rarity * 0.12) * (berryEffect === "nanab" ? .48 : 1);
+    const speed = (1.05 + selected.monster.rarity * 0.08) * (berryEffect === "nanab" ? .45 : 1);
     let lastPaint = 0;
     const animate = (now: number) => {
       if (now - lastPaint > 30) {
-        setMonsterX(Math.sin((now - startedAt) / 1000 * speed + Math.PI / 2) * 92);
+        setMonsterX(Math.sin((now - startedAt) / 1000 * speed + Math.PI / 2) * 65);
         lastPaint = now;
       }
       animationFrame = requestAnimationFrame(animate);
@@ -392,14 +392,16 @@ export function PocketTrails() {
     if (!selected || (save[ball.key] || 0) < 1 || throwing) return;
     const angle = Math.max(-CURVE_MAX_DEGREES, Math.min(CURVE_MAX_DEGREES, swipe.angle || 0));
     const angleRatio = angle / CURVE_MAX_DEGREES;
-    const trajectoryX = Math.max(-115, Math.min(115, swipe.dx * 1.25 + angleRatio * 50));
-    const timingDistance = Math.abs(monsterX - trajectoryX) + Math.abs(swipe.upward - 125) * .22;
-    const timing = timingDistance <= 10
+    const rawTrajectoryX = Math.max(-115, Math.min(115, swipe.dx * 1.25 + angleRatio * 50));
+    const aimAssist = selected.monster.raidOnly ? .14 : .32;
+    const trajectoryX = rawTrajectoryX * (1 - aimAssist) + monsterX * aimAssist;
+    const timingDistance = Math.abs(monsterX - trajectoryX) + Math.abs(swipe.upward - 125) * .12;
+    const timing = timingDistance <= 22
       ? { label: "EXCELLENT!", multiplier: 1.8 }
-      : timingDistance <= 25
-        ? { label: "GREAT!", multiplier: 1.35 }
-        : timingDistance <= 48
-          ? { label: "NICE!", multiplier: 1 }
+      : timingDistance <= 50
+        ? { label: "GREAT!", multiplier: 1.4 }
+        : timingDistance <= 88
+          ? { label: "NICE!", multiplier: 1.08 }
           : { label: "빗나감!", multiplier: 0 };
     const flightY = -Math.max(215, Math.min(340, 190 + swipe.upward * .65));
     setThrowX(trajectoryX);
@@ -431,7 +433,8 @@ export function PocketTrails() {
       const baseRate = target.monster.catchRate ?? Math.max(.25, .86 - target.monster.rarity * .09);
       const berryBonus = berryEffect === "razz" ? 1.5 : 1;
       const curveBonus = 1 + Math.abs(angleRatio) * .1;
-      const caught = timing.multiplier > 0 && Math.random() < Math.min(.96, baseRate * ball.bonus * timing.multiplier * berryBonus * curveBonus);
+      const easyBonus = target.monster.raidOnly ? 1 : 1.22;
+      const caught = timing.multiplier > 0 && Math.random() < Math.min(.97, baseRate * ball.bonus * timing.multiplier * berryBonus * curveBonus * easyBonus);
       if (caught) {
         const family = target.monster.family || target.monster.id;
         const candyReward = berryEffect === "pinap" ? 6 : 3;
@@ -503,7 +506,7 @@ export function PocketTrails() {
     setDraggingBall(false);
     setDragOffset({ x: 0, y: 0 });
     setCurveAngle(0);
-    if (upward < 45) {
+    if (upward < 30) {
       setTimingLabel("더 길게 위로 쓸어 올리세요!");
       return;
     }
