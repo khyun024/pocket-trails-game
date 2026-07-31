@@ -49,9 +49,9 @@ export const MONSTERS: Monster[] = [
   { id: "monster-028", name: "썬더", sprite: "/monsters/썬더.png", type: "전기/비행", color: "#d9b62e", rarity: 5, catchRate: 0.015, spawnWeight: 0, raidOnly: true, description: "하늘이 어두워지고 벼락이 연속으로 떨어진 뒤에야 전설의 포켓몬은 나타난다." },
   { id: "monster-029", name: "파이어", sprite: "/monsters/파이어.png", type: "불꽃/비행", color: "#df7542", rarity: 5, catchRate: 0.015, spawnWeight: 0, raidOnly: true, description: "밤하늘마저 빨갛게 물들일 만큼 세차게 타오르는 날개로 나는 전설의 새 포켓몬." },
   { id: "monster-030", name: "뮤", sprite: "/monsters/뮤.png", type: "에스퍼", color: "#d88fb2", rarity: 5, catchRate: 0.008, spawnWeight: 0, raidOnly: true, description: "현미경으로 관찰하면 매우 짧고 가는 털이 촘촘하게 나 있다." },
-  { id: "monster-031", name: "메가리자몽 X", sprite: "/monsters/메가리자몽X.png", type: "불꽃/드래곤", color: "#315f85", rarity: 5, catchRate: 0.08, spawnWeight: 0, hidden: true, description: "특정 조건을 만족한 탐험가 앞에만 검푸른 불꽃과 함께 모습을 드러내는 비밀의 포켓몬." },
-  { id: "monster-032", name: "루기아", sprite: "/monsters/루기아.png", type: "에스퍼/비행", color: "#8799c8", rarity: 5, catchRate: 0.012, spawnWeight: 0, raidOnly: true, description: "날개를 가볍게 퍼덕이는 것만으로 민가를 날려버릴 만큼 강한 힘을 지녔다." },
-  { id: "monster-033", name: "칠색조", sprite: "/monsters/칠색조.png", type: "불꽃/비행", color: "#d98a48", rarity: 5, catchRate: 0.012, spawnWeight: 0, raidOnly: true, description: "빛이 닿는 각도에 따라 일곱 빛깔로 반짝이는 날개를 가진 전설의 포켓몬." },
+  { id: "monster-031", name: "메가리자몽 X", sprite: "/monsters/메가리자몽 X.webp", type: "불꽃/드래곤", color: "#315f85", rarity: 5, catchRate: 0.08, spawnWeight: 0, hidden: true, description: "온몸에 넘치는 엄청난 파워가 몸을 검게 물들이고 푸른 불꽃을 이글이글 태운다." },
+  { id: "monster-032", name: "루기아", sprite: "/monsters/루기아.webp", type: "에스퍼/비행", color: "#8799c8", rarity: 5, catchRate: 0.012, spawnWeight: 0, raidOnly: true, description: "바다의 신이라고 전해지는 포켓몬이다. 폭풍 치는 밤에 모습을 봤다는 이야기가 전해져온다." },
+  { id: "monster-033", name: "칠색조", sprite: "/monsters/칠색조.webp", type: "불꽃/비행", color: "#d98a48", rarity: 5, catchRate: 0.012, spawnWeight: 0, raidOnly: true, description: "몸은 일곱가지 색으로 빛나며 날아간 후에 무지개가 뜬다고 신화에 남아있는 포켓몬." },
 ];
 
 // 이미지 사용 예시:
