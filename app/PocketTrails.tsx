@@ -130,6 +130,46 @@ function seededUnit(seed: number, salt: number) {
   return value - Math.floor(value);
 }
 
+function playThrowSound(curve: boolean) {
+  try {
+    const AudioContextClass = window.AudioContext
+      || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = curve ? "triangle" : "sine";
+    oscillator.frequency.setValueAtTime(curve ? 170 : 220, context.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(curve ? 760 : 620, context.currentTime + .2);
+    gain.gain.setValueAtTime(.075, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + .23);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + .24);
+    oscillator.onended = () => { void context.close(); };
+  } catch { /* 소리를 지원하지 않는 기기에서는 진동과 애니메이션만 사용 */ }
+}
+
+function playImpactSound() {
+  try {
+    const AudioContextClass = window.AudioContext
+      || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "square";
+    oscillator.frequency.setValueAtTime(145, context.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(62, context.currentTime + .1);
+    gain.gain.setValueAtTime(.06, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + .13);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + .14);
+    oscillator.onended = () => { void context.close(); };
+  } catch { /* 효과음 없이 계속 플레이 */ }
+}
+
 function createSpawns(seed = Date.now()): Spawn[] {
   return Array.from({ length: 7 }, (_, index) => ({
     key: seed + index,
@@ -158,6 +198,7 @@ export function PocketTrails() {
   const [draggingBall, setDraggingBall] = useState(false);
   const [curvePreview, setCurvePreview] = useState(0);
   const [spinAngle, setSpinAngle] = useState(0);
+  const [impacting, setImpacting] = useState(false);
   const [timingLabel, setTimingLabel] = useState("몬스터볼을 위로 쓸어 올리세요!");
   const [ballMenuOpen, setBallMenuOpen] = useState(false);
   const [berryMenuOpen, setBerryMenuOpen] = useState(false);
@@ -346,7 +387,7 @@ export function PocketTrails() {
 
   function throwBall(swipe: { dx: number; upward: number; curve?: number }) {
     const ball = BALLS[selectedBall];
-    if (!selected || (save[ball.key] || 0) < 1 || throwing) return;
+    if (!selected || throwing) return;
     const curveDirection = Math.sign(swipe.curve || 0);
     const trajectoryX = Math.max(-115, Math.min(115, swipe.dx * 1.3 + curveDirection * 45));
     const timingDistance = Math.abs(monsterX - trajectoryX) + Math.abs(swipe.upward - 125) * .22;
@@ -364,8 +405,17 @@ export function PocketTrails() {
     setThrowMidY(flightY * .56);
     setTimingLabel(`${timing.label}${curveDirection ? " · CURVEBALL" : ""}`);
     setThrowing(true);
-    setSave((s) => ({ ...s, [ball.key]: Math.max(0, (s[ball.key] || 0) - 1) }));
+    playThrowSound(Boolean(curveDirection));
+    navigator.vibrate?.(curveDirection ? [10, 18, 10] : 12);
     const target = selected;
+    if (timing.multiplier > 0) {
+      setTimeout(() => {
+        setImpacting(true);
+        playImpactSound();
+        navigator.vibrate?.([22, 24, 35]);
+        setTimeout(() => setImpacting(false), 280);
+      }, 610);
+    }
     setTimeout(() => {
       const baseRate = target.monster.catchRate ?? Math.max(.25, .86 - target.monster.rarity * .09);
       const berryBonus = berryEffect === "razz" ? 1.5 : 1;
@@ -389,6 +439,7 @@ export function PocketTrails() {
           : `${timing.label} 하지만 ${target.monster.name}이(가) 빠져나왔어요!`);
       }
       setBerryEffect(null);
+      setImpacting(false);
       setThrowing(false);
       setTimingLabel("몬스터볼을 위로 쓸어 올리세요!");
       setTimeout(() => setMessage(""), 2100);
@@ -396,7 +447,7 @@ export function PocketTrails() {
   }
 
   function beginBallSwipe(event: React.PointerEvent<HTMLButtonElement>) {
-    if (throwing || !(save[BALLS[selectedBall].key] || 0)) return;
+    if (throwing) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     throwStart.current = {
       x: event.clientX,
@@ -795,9 +846,9 @@ export function PocketTrails() {
                 <article><span>걸음</span><b>{save.steps}</b><small>회</small></article>
               </div>
               <section className="inventory">
-                <div><span className="ball-icon basic" /><p><b>몬스터볼</b><small>야생 몬스터를 포획하는 기본 볼</small></p><strong>{save.balls}</strong></div>
-                <div><span className="ball-icon great" /><p><b>슈퍼볼</b><small>포획 확률 1.35배</small></p><strong>{save.greatBalls || 0}</strong></div>
-                <div><span className="ball-icon ultra" /><p><b>하이퍼볼</b><small>포획 확률 1.25배</small></p><strong>{save.ultraBalls || 0}</strong></div>
+                <div><span className="ball-icon basic" /><p><b>몬스터볼</b><small>야생 몬스터를 포획하는 기본 볼</small></p><strong>∞</strong></div>
+                <div><span className="ball-icon great" /><p><b>슈퍼볼</b><small>포획 확률 1.35배</small></p><strong>∞</strong></div>
+                <div><span className="ball-icon ultra" /><p><b>하이퍼볼</b><small>포획 확률 1.25배</small></p><strong>∞</strong></div>
                 <div><span className="item-emoji">🍓</span><p><b>라즈열매</b><small>포획 확률을 높여요</small></p><strong>{save.razzBerries}</strong></div>
                 <div><span className="item-emoji">🍌</span><p><b>나나열매</b><small>포켓몬 움직임을 늦춰요</small></p><strong>{save.nanabBerries}</strong></div>
                 <div><span className="item-emoji">🍍</span><p><b>파인열매</b><small>받는 사탕이 2배가 돼요</small></p><strong>{save.pinapBerries}</strong></div>
@@ -820,9 +871,10 @@ export function PocketTrails() {
         {raidOpen && <RaidBattle boss={raidBoss} onClose={() => setRaidOpen(false)} onWin={finishRaid} />}
 
         {selected && (
-          <div className="encounter" style={{ "--accent": selected.monster.color } as React.CSSProperties}>
+          <div className={`encounter ${impacting ? "impacting" : ""}`} style={{ "--accent": selected.monster.color } as React.CSSProperties}>
             <button className="close-encounter" onClick={() => setSelected(null)} aria-label="포획 화면 닫기">×</button>
             <div className="encounter-sky"><i /><i /><i /></div>
+            <div className="encounter-impact" aria-hidden="true" />
             <div className="encounter-hud">
               <div><span>◉</span><b>{selected.monster.name}</b></div>
               <strong>CP {Math.max(10, selected.monster.rarity * 110 + selected.key % 170)}</strong>
@@ -831,7 +883,7 @@ export function PocketTrails() {
             </div>
             <div className="encounter-monster">
               <div
-                className="encounter-target"
+                className={`encounter-target ${impacting ? "impacting" : ""}`}
                 style={{
                   "--monster-x": `${monsterX}px`,
                   "--monster-size": `${encounterMonsterSize}px`,
@@ -853,9 +905,8 @@ export function PocketTrails() {
                     key={kind}
                     className={selectedBall === kind ? "active" : ""}
                     onClick={() => { setSelectedBall(kind); setBallMenuOpen(false); }}
-                    disabled={!(save[ball.key] || 0)}
                   >
-                    <span className={`ball-icon ${kind}`} /><b>{ball.name}</b><small>{save[ball.key] || 0}개</small>
+                    <span className={`ball-icon ${kind}`} /><b>{ball.name}</b><small>∞</small>
                   </button>;
                 })}
               </div>
@@ -897,11 +948,11 @@ export function PocketTrails() {
                     throwBall({ dx: 0, upward: 125, curve: 0 });
                   }
                 }}
-                disabled={!(save[BALLS[selectedBall].key] || 0) || throwing}
+                disabled={throwing}
                 aria-label={`${BALLS[selectedBall].name}을 위로 스와이프해서 던지기`}
               >
                 <span className={`ball-icon ${selectedBall}`} />
-                <small>{save[BALLS[selectedBall].key] || 0}</small>
+                <small>∞</small>
               </button>
               <button className="encounter-item ball-bag" onClick={() => { setBallMenuOpen((open) => !open); setBerryMenuOpen(false); }} aria-label="볼 선택">
                 <span className={`ball-icon ${selectedBall}`} />
