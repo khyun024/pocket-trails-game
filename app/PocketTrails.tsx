@@ -47,7 +47,6 @@ const BERRIES = {
   pinap: { name: "파인열매", icon: "🍍", key: "pinapBerries" as const, description: "포획 사탕 2배" },
 };
 const RAID_BOSSES = MONSTERS.filter((monster) => monster.raidOnly);
-const RAID_CATCH_BONUS = 2.5;
 const WORLD_COLUMNS = 9;
 const WORLD_ROWS = 13;
 const WORLD_X_LIMIT = Math.floor(WORLD_COLUMNS / 2);
@@ -413,8 +412,11 @@ export function PocketTrails() {
     setTimeout(() => {
       const baseRate = target.monster.catchRate ?? Math.max(.25, .86 - target.monster.rarity * .09);
       const berryBonus = berryEffect === "razz" ? 1.5 : 1;
-      const easyBonus = target.monster.raidOnly ? RAID_CATCH_BONUS : 1.22;
-      const caught = timing.multiplier > 0 && Math.random() < Math.min(.97, baseRate * ball.bonus * timing.multiplier * berryBonus * easyBonus);
+      const standardChance = Math.min(.97, baseRate * ball.bonus * timing.multiplier * berryBonus * 1.22);
+      const raidMinimum = timing.label === "EXCELLENT!" ? .6 : timing.label === "GREAT!" ? .45 : timing.label === "NICE!" ? .3 : 0;
+      const raidChance = Math.min(.9, raidMinimum * ball.bonus * berryBonus);
+      const catchChance = target.monster.raidOnly ? Math.max(standardChance, raidChance) : standardChance;
+      const caught = timing.multiplier > 0 && Math.random() < catchChance;
       if (caught) {
         const family = target.monster.family || target.monster.id;
         const candyReward = berryEffect === "pinap" ? 6 : 3;
