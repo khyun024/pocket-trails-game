@@ -2,17 +2,50 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MONSTERS, type Monster } from "./monster-data";
+import { BattleArena } from "./BattleArena";
 
 type Spawn = { key: number; monster: Monster; x: number; y: number };
-type Save = { caught: Record<string, number>; balls: number; greatBalls?: number; ultraBalls?: number; xp: number; steps: number; starter?: string };
+type Save = {
+  caught: Record<string, number>;
+  candies: Record<string, number>;
+  balls: number;
+  greatBalls?: number;
+  ultraBalls?: number;
+  razzBerries: number;
+  nanabBerries: number;
+  pinapBerries: number;
+  raidPasses: number;
+  xp: number;
+  steps: number;
+  starter?: string;
+};
 type BallKind = "basic" | "great" | "ultra";
+type BerryKind = "razz" | "nanab" | "pinap";
 
-const initialSave: Save = { caught: {}, balls: 30, greatBalls: 10, ultraBalls: 3, xp: 0, steps: 0 };
+const initialSave: Save = {
+  caught: {},
+  candies: {},
+  balls: 30,
+  greatBalls: 10,
+  ultraBalls: 3,
+  razzBerries: 10,
+  nanabBerries: 7,
+  pinapBerries: 5,
+  raidPasses: 3,
+  xp: 0,
+  steps: 0,
+};
 const BALLS = {
   basic: { name: "몬스터볼", key: "balls" as const, bonus: 1 },
   great: { name: "슈퍼볼", key: "greatBalls" as const, bonus: 1.35 },
   ultra: { name: "하이퍼볼", key: "ultraBalls" as const, bonus: 1.25 },
 };
+const BERRIES = {
+  razz: { name: "라즈열매", icon: "🍓", key: "razzBerries" as const, description: "다음 포획 확률 1.5배" },
+  nanab: { name: "나나열매", icon: "🍌", key: "nanabBerries" as const, description: "포켓몬 움직임 감소" },
+  pinap: { name: "파인열매", icon: "🍍", key: "pinapBerries" as const, description: "포획 사탕 2배" },
+};
+const RAID_BOSSES = MONSTERS.filter((monster) => monster.raidOnly);
 const WORLD_COLUMNS = 9;
 const WORLD_ROWS = 13;
 const WORLD_X_LIMIT = Math.floor(WORLD_COLUMNS / 2);
@@ -79,7 +112,7 @@ export function PocketTrails() {
   const [position, setPosition] = useState({ x: 49, y: 53 });
   const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
   const [selected, setSelected] = useState<Spawn | null>(null);
-  const [tab, setTab] = useState<"map" | "dex" | "bag">("map");
+  const [tab, setTab] = useState<"map" | "dex" | "battle" | "bag">("map");
   const [message, setMessage] = useState("");
   const [throwing, setThrowing] = useState(false);
   const [selectedBall, setSelectedBall] = useState<BallKind>("basic");
@@ -87,6 +120,12 @@ export function PocketTrails() {
   const [throwX, setThrowX] = useState(0);
   const [timingLabel, setTimingLabel] = useState("중앙에 왔을 때 볼을 누르세요!");
   const [ballMenuOpen, setBallMenuOpen] = useState(false);
+  const [berryMenuOpen, setBerryMenuOpen] = useState(false);
+  const [berryEffect, setBerryEffect] = useState<BerryKind | null>(null);
+  const [raidOpen, setRaidOpen] = useState(false);
+  const [raidHp, setRaidHp] = useState(100);
+  const [raidTime, setRaidTime] = useState(30);
+  const [raidAttacking, setRaidAttacking] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [gps, setGps] = useState<"off" | "loading" | "on" | "error">("off");
   const [gpsInfo, setGpsInfo] = useState<{ accuracy: number; threshold: number; updated: string } | null>(null);
@@ -139,7 +178,7 @@ export function PocketTrails() {
     if (!selected || throwing) return;
     let animationFrame = 0;
     const startedAt = performance.now();
-    const speed = 1.35 + selected.monster.rarity * 0.12;
+    const speed = (1.35 + selected.monster.rarity * 0.12) * (berryEffect === "nanab" ? .48 : 1);
     let lastPaint = 0;
     const animate = (now: number) => {
       if (now - lastPaint > 30) {
@@ -150,12 +189,28 @@ export function PocketTrails() {
     };
     animationFrame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrame);
-  }, [selected, throwing]);
+  }, [selected, throwing, berryEffect]);
+
+  useEffect(() => {
+    if (!raidOpen || raidHp <= 0 || raidTime <= 0) return;
+    const timer = window.setInterval(() => setRaidTime((time) => Math.max(0, time - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [raidOpen, raidHp, raidTime]);
+
+  useEffect(() => {
+    if (raidOpen && raidTime === 0 && raidHp > 0) {
+      setRaidOpen(false);
+      setMessage("레이드 시간 초과! 다음에 다시 도전하세요.");
+      setTimeout(() => setMessage(""), 2200);
+    }
+  }, [raidOpen, raidTime, raidHp]);
 
   const level = Math.floor(save.xp / 100) + 1;
   const caughtTotal = Object.values(save.caught).reduce((a, b) => a + b, 0);
   const discovered = Object.keys(save.caught).length;
   const worldSector = (mapOffset.y + WORLD_Y_LIMIT) * WORLD_COLUMNS + mapOffset.x + WORLD_X_LIMIT + 1;
+  const raidBoss = RAID_BOSSES[worldSector % RAID_BOSSES.length] || MONSTERS[0];
+  const ownedMonsters = MONSTERS.filter((monster) => (save.caught[monster.id] || 0) > 0);
   const terrain = useMemo(() => {
     const seed = (mapOffset.x + WORLD_X_LIMIT + 1) * 1009 + (mapOffset.y + WORLD_Y_LIMIT + 1) * 9176;
     const random = (salt: number) => seededUnit(seed, salt);
@@ -252,6 +307,8 @@ export function PocketTrails() {
     setMonsterX(92);
     setTimingLabel("중앙에 왔을 때 볼을 누르세요!");
     setBallMenuOpen(false);
+    setBerryMenuOpen(false);
+    setBerryEffect(null);
     setSelected(spawn);
   }
 
@@ -273,12 +330,16 @@ export function PocketTrails() {
     const target = selected;
     setTimeout(() => {
       const baseRate = target.monster.catchRate ?? Math.max(.25, .86 - target.monster.rarity * .09);
-      const caught = timing.multiplier > 0 && Math.random() < Math.min(.96, baseRate * ball.bonus * timing.multiplier);
+      const berryBonus = berryEffect === "razz" ? 1.5 : 1;
+      const caught = timing.multiplier > 0 && Math.random() < Math.min(.96, baseRate * ball.bonus * timing.multiplier * berryBonus);
       if (caught) {
+        const family = target.monster.family || target.monster.id;
+        const candyReward = berryEffect === "pinap" ? 6 : 3;
         setSave((s) => ({
           ...s,
           xp: s.xp + 20 + target.monster.rarity * 5,
           caught: { ...s.caught, [target.monster.id]: (s.caught[target.monster.id] || 0) + 1 },
+          candies: { ...s.candies, [family]: (s.candies[family] || 0) + candyReward },
         }));
         setSpawns((items) => items.filter((item) => item.key !== target.key));
         setMessage(`${target.monster.name} 포획 성공!`);
@@ -288,16 +349,89 @@ export function PocketTrails() {
           ? "타이밍이 어긋나 볼이 빗나갔어요!"
           : `${timing.label} 하지만 ${target.monster.name}이(가) 빠져나왔어요!`);
       }
+      setBerryEffect(null);
       setThrowing(false);
       setTimingLabel("중앙에 왔을 때 볼을 누르세요!");
       setTimeout(() => setMessage(""), 2100);
     }, 900);
   }
 
+  function useBerry(kind: BerryKind) {
+    const berry = BERRIES[kind];
+    if ((save[berry.key] || 0) < 1 || throwing) return;
+    setSave((current) => ({ ...current, [berry.key]: Math.max(0, current[berry.key] - 1) }));
+    setBerryEffect(kind);
+    setBerryMenuOpen(false);
+    setMessage(`${berry.name} 사용 · ${berry.description}`);
+    setTimeout(() => setMessage(""), 1600);
+  }
+
+  function evolve(monster: Monster) {
+    if (!monster.evolvesTo || !monster.evolutionCost || (save.caught[monster.id] || 0) < 1) return;
+    const evolved = MONSTERS.find((candidate) => candidate.id === monster.evolvesTo);
+    const family = monster.family || monster.id;
+    if (!evolved || (save.candies[family] || 0) < monster.evolutionCost) return;
+    setSave((current) => ({
+      ...current,
+      xp: current.xp + 50,
+      candies: { ...current.candies, [family]: current.candies[family] - monster.evolutionCost! },
+      caught: {
+        ...current.caught,
+        [monster.id]: Math.max(0, current.caught[monster.id] - 1),
+        [evolved.id]: (current.caught[evolved.id] || 0) + 1,
+      },
+    }));
+    setMessage(`${monster.name}이(가) ${evolved.name}(으)로 진화했어요!`);
+    setTimeout(() => setMessage(""), 2300);
+  }
+
+  function startRaid() {
+    if (save.raidPasses < 1) {
+      setMessage("레이드패스가 없어요. 포켓스탑에서 충전하세요!");
+      setTimeout(() => setMessage(""), 1900);
+      return;
+    }
+    setSave((current) => ({ ...current, raidPasses: current.raidPasses - 1 }));
+    setRaidHp(100);
+    setRaidTime(30);
+    setRaidOpen(true);
+  }
+
+  function attackRaid() {
+    if (raidAttacking || raidHp <= 0 || raidTime <= 0) return;
+    setRaidAttacking(true);
+    const damage = 8 + Math.floor(Math.random() * 8);
+    setRaidHp((hp) => {
+      const next = Math.max(0, hp - damage);
+      if (next === 0) {
+        setTimeout(() => {
+          setRaidOpen(false);
+          setMonsterX(92);
+          setTimingLabel("레이드 보상 포획! 중앙을 노리세요.");
+          setBerryEffect(null);
+          setSelected({ key: Date.now(), monster: raidBoss, x: position.x, y: position.y });
+          setMessage(`${raidBoss.name} 레이드 승리! 포획 기회 획득!`);
+          setTimeout(() => setMessage(""), 2200);
+        }, 650);
+      }
+      return next;
+    });
+    setTimeout(() => setRaidAttacking(false), 420);
+  }
+
   function refill() {
-    if (save.balls >= 30 && (save.greatBalls || 0) >= 10 && (save.ultraBalls || 0) >= 3) return;
-    setSave((s) => ({ ...s, balls: 30, greatBalls: 10, ultraBalls: 3 }));
-    setMessage("모든 볼을 충전했어요!");
+    if (save.balls >= 30 && (save.greatBalls || 0) >= 10 && (save.ultraBalls || 0) >= 3 && save.razzBerries >= 10 && save.raidPasses >= 3) return;
+    setSave((s) => ({
+      ...s,
+      balls: Math.max(30, s.balls),
+      greatBalls: Math.max(10, s.greatBalls || 0),
+      ultraBalls: Math.max(3, s.ultraBalls || 0),
+      razzBerries: Math.max(10, s.razzBerries),
+      nanabBerries: Math.max(7, s.nanabBerries),
+      pinapBerries: Math.max(5, s.pinapBerries),
+      raidPasses: Math.max(3, s.raidPasses),
+    }));
+    setMessage("볼·열매·레이드패스를 충전했어요!");
     setTimeout(() => setMessage(""), 1800);
   }
 
@@ -430,6 +564,7 @@ export function PocketTrails() {
       ...s,
       starter: monster.id,
       caught: { ...s.caught, [monster.id]: Math.max(1, s.caught[monster.id] || 0) },
+      candies: { ...s.candies, [monster.family || monster.id]: Math.max(3, s.candies[monster.family || monster.id] || 0) },
     }));
     setMessage(`${monster.name}와(과) 모험을 시작합니다!`);
     setTimeout(() => setMessage(""), 2300);
@@ -464,6 +599,9 @@ export function PocketTrails() {
               {terrain.stops.map(([x, y], index) => (
                 <button key={`${mapOffset.x}-${mapOffset.y}-${index}`} className="stop" style={{ left: `${x}%`, top: `${y}%` }} onClick={refill} aria-label="포켓스탑">◈</button>
               ))}
+              <button className="raid-gym" style={{ left: `${terrain.stops[0][0]}%`, top: `${Math.min(82, terrain.stops[0][1] + 10)}%` }} onClick={startRaid} aria-label={`${raidBoss.name} 레이드 참가`}>
+                <i>⚔</i><b>RAID</b><span>{raidBoss.name}</span>
+              </button>
               {spawns.map((spawn) => (
                 <button
                   key={spawn.key}
@@ -513,17 +651,28 @@ export function PocketTrails() {
               <div className="dex-grid">
                 {MONSTERS.map((monster) => {
                   const count = save.caught[monster.id] || 0;
+                  const family = monster.family || monster.id;
+                  const candy = save.candies[family] || 0;
+                  const evolved = monster.evolvesTo ? MONSTERS.find((candidate) => candidate.id === monster.evolvesTo) : null;
                   return <article key={monster.id} className={count ? "found" : "locked"}>
                     <div style={{ background: `${monster.color}22`, color: monster.color }}>{count ? <MonsterSprite monster={monster} /> : "?"}</div>
                     <span>NO.{String(MONSTERS.indexOf(monster) + 1).padStart(3, "0")}</span>
                     <b>{count ? monster.name : "미발견"}</b>
                     <small>{count ? <><TypeBadges type={monster.type} /><em>{count}마리</em></> : "???"}</small>
                     {count > 0 && <p>{monster.description}</p>}
+                    {count > 0 && evolved && monster.evolutionCost && (
+                      <section className="evolution-row">
+                        <span>🍬 {candy} / {monster.evolutionCost}</span>
+                        <button onClick={() => evolve(monster)} disabled={candy < monster.evolutionCost}>{evolved.name}(으)로 진화</button>
+                      </section>
+                    )}
                   </article>;
                 })}
               </div>
             </div>
           )}
+
+          {tab === "battle" && <BattleArena owned={ownedMonsters} />}
 
           {tab === "bag" && (
             <div className="content-panel bag-panel">
@@ -541,6 +690,10 @@ export function PocketTrails() {
                 <div><span className="ball-icon basic" /><p><b>몬스터볼</b><small>야생 몬스터를 포획하는 기본 볼</small></p><strong>{save.balls}</strong></div>
                 <div><span className="ball-icon great" /><p><b>슈퍼볼</b><small>포획 확률 1.35배</small></p><strong>{save.greatBalls || 0}</strong></div>
                 <div><span className="ball-icon ultra" /><p><b>하이퍼볼</b><small>포획 확률 1.25배</small></p><strong>{save.ultraBalls || 0}</strong></div>
+                <div><span className="item-emoji">🍓</span><p><b>라즈열매</b><small>포획 확률을 높여요</small></p><strong>{save.razzBerries}</strong></div>
+                <div><span className="item-emoji">🍌</span><p><b>나나열매</b><small>포켓몬 움직임을 늦춰요</small></p><strong>{save.nanabBerries}</strong></div>
+                <div><span className="item-emoji">🍍</span><p><b>파인열매</b><small>받는 사탕이 2배가 돼요</small></p><strong>{save.pinapBerries}</strong></div>
+                <div><span className="item-emoji">🎟️</span><p><b>레이드패스</b><small>전설 레이드 입장권</small></p><strong>{save.raidPasses}</strong></div>
                 <button onClick={refill}>충전소 이용하기</button>
               </section>
               <button className="reset" onClick={() => { setSave(initialSave); setSpawns(createSpawns()); }}>저장 기록 초기화</button>
@@ -551,8 +704,22 @@ export function PocketTrails() {
         <nav className="bottom-nav">
           <button className={tab === "map" ? "active" : ""} onClick={() => setTab("map")}><i>⌖</i><span>지도</span></button>
           <button className={tab === "dex" ? "active" : ""} onClick={() => setTab("dex")}><i>▦</i><span>도감</span></button>
+          <button className={tab === "battle" ? "active" : ""} onClick={() => setTab("battle")}><i>⚔</i><span>배틀</span></button>
           <button className={tab === "bag" ? "active" : ""} onClick={() => setTab("bag")}><i>◉</i><span>가방</span></button>
         </nav>
+
+        {raidOpen && (
+          <div className="raid-screen">
+            <button className="close-raid" onClick={() => setRaidOpen(false)}>×</button>
+            <div className="raid-title"><span>전설 레이드</span><h1>{raidBoss.name}</h1><b>{raidTime}초</b></div>
+            <div className="raid-boss"><MonsterSprite monster={raidBoss} /></div>
+            <div className="raid-hp"><span style={{ width: `${raidHp}%` }} /></div>
+            <p>화면 아래 공격 버튼을 빠르게 눌러 쓰러뜨리세요!</p>
+            <button className={`raid-attack ${raidAttacking ? "hit" : ""}`} onClick={attackRaid} disabled={raidHp <= 0 || raidTime <= 0}>
+              {raidHp <= 0 ? "승리!" : "공격"}
+            </button>
+          </div>
+        )}
 
         {selected && (
           <div className="encounter" style={{ "--accent": selected.monster.color } as React.CSSProperties}>
@@ -562,6 +729,7 @@ export function PocketTrails() {
               <div><span>◉</span><b>{selected.monster.name}</b></div>
               <strong>CP {Math.max(10, selected.monster.rarity * 110 + selected.key % 170)}</strong>
               <TypeBadges type={selected.monster.type} />
+              {berryEffect && <em className="berry-active">{BERRIES[berryEffect].icon} {BERRIES[berryEffect].name}</em>}
             </div>
             <div className="aim-zone" aria-hidden="true"><i /><span /></div>
             <div className="encounter-monster">
@@ -585,11 +753,21 @@ export function PocketTrails() {
                 })}
               </div>
             )}
+            {berryMenuOpen && (
+              <div className="encounter-berry-menu">
+                <span>사용할 열매</span>
+                {(Object.keys(BERRIES) as BerryKind[]).map((kind) => {
+                  const berry = BERRIES[kind];
+                  return <button key={kind} onClick={() => useBerry(kind)} disabled={save[berry.key] < 1}>
+                    <i>{berry.icon}</i><b>{berry.name}</b><small>{save[berry.key]}개</small><em>{berry.description}</em>
+                  </button>;
+                })}
+              </div>
+            )}
             <div className="catch-controls">
-              <button className="encounter-item" onClick={() => {
-                setMessage("열매 아이템은 다음 업데이트에서 사용할 수 있어요!");
-                setTimeout(() => setMessage(""), 1600);
-              }} aria-label="열매">🍓</button>
+              <button className="encounter-item" onClick={() => { setBerryMenuOpen((open) => !open); setBallMenuOpen(false); }} aria-label="열매 선택">
+                {berryEffect ? BERRIES[berryEffect].icon : "🍓"}
+              </button>
               <button
                 className={`throw ${throwing ? "throwing" : ""}`}
                 style={{ "--throw-x": `${throwX}px` } as React.CSSProperties}
@@ -600,7 +778,7 @@ export function PocketTrails() {
                 <span className={`ball-icon ${selectedBall}`} />
                 <small>{save[BALLS[selectedBall].key] || 0}</small>
               </button>
-              <button className="encounter-item ball-bag" onClick={() => setBallMenuOpen((open) => !open)} aria-label="볼 선택">
+              <button className="encounter-item ball-bag" onClick={() => { setBallMenuOpen((open) => !open); setBerryMenuOpen(false); }} aria-label="볼 선택">
                 <span className={`ball-icon ${selectedBall}`} />
               </button>
             </div>
