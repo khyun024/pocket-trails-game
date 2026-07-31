@@ -197,7 +197,10 @@ export function PocketTrails() {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [draggingBall, setDraggingBall] = useState(false);
   const [curvePreview, setCurvePreview] = useState(0);
-  const [spinAngle, setSpinAngle] = useState(0);
+  const [spinDuration, setSpinDuration] = useState(.42);
+  const [throwSpinEarly, setThrowSpinEarly] = useState(210);
+  const [throwSpinMid, setThrowSpinMid] = useState(560);
+  const [throwSpinEnd, setThrowSpinEnd] = useState(1080);
   const [impacting, setImpacting] = useState(false);
   const [timingLabel, setTimingLabel] = useState("몬스터볼을 위로 쓸어 올리세요!");
   const [ballMenuOpen, setBallMenuOpen] = useState(false);
@@ -385,7 +388,7 @@ export function PocketTrails() {
     setSelected(spawn);
   }
 
-  function throwBall(swipe: { dx: number; upward: number; curve?: number }) {
+  function throwBall(swipe: { dx: number; upward: number; curve?: number; spin?: number }) {
     const ball = BALLS[selectedBall];
     if (!selected || (save[ball.key] || 0) < 1 || throwing) return;
     const curveDirection = Math.sign(swipe.curve || 0);
@@ -403,6 +406,11 @@ export function PocketTrails() {
     setThrowY(flightY);
     setThrowMidX(trajectoryX * .35 + curveDirection * 72);
     setThrowMidY(flightY * .56);
+    const spinDirection = curveDirection || 1;
+    const spinStrength = swipe.spin || 1080;
+    setThrowSpinEarly(spinDirection * spinStrength * .18);
+    setThrowSpinMid(spinDirection * spinStrength * .48);
+    setThrowSpinEnd(spinDirection * spinStrength);
     setTimingLabel(`${timing.label}${curveDirection ? " · CURVEBALL" : ""}`);
     setThrowing(true);
     setSave((current) => ({
@@ -462,7 +470,7 @@ export function PocketTrails() {
     };
     setDragOffset({ x: 0, y: 0 });
     setCurvePreview(0);
-    setSpinAngle(0);
+    setSpinDuration(.42);
     setDraggingBall(true);
     setTimingLabel("좌우로 돌린 뒤 위로 던지면 커브볼!");
   }
@@ -479,7 +487,7 @@ export function PocketTrails() {
       ? Math.sign(throwStart.current.furthestX)
       : 0;
     setCurvePreview(curve);
-    setSpinAngle((current) => current + stepX * 7);
+    setSpinDuration(Math.max(.18, .44 - Math.min(.26, Math.abs(stepX) * .012)));
     setDragOffset({
       x: Math.max(-85, Math.min(85, dx)),
       y: Math.max(-150, Math.min(8, event.clientY - throwStart.current.y)),
@@ -494,16 +502,19 @@ export function PocketTrails() {
     const curve = throwStart.current.horizontalTravel >= 30 && Math.abs(throwStart.current.furthestX) >= 18
       ? Math.sign(throwStart.current.furthestX)
       : 0;
+    const spin = curve
+      ? Math.max(1200, Math.min(2200, throwStart.current.horizontalTravel * 12))
+      : 1080;
     throwStart.current = null;
     setDraggingBall(false);
     setDragOffset({ x: 0, y: 0 });
     setCurvePreview(0);
-    setSpinAngle(0);
+    setSpinDuration(.42);
     if (upward < 45) {
       setTimingLabel("더 길게 위로 쓸어 올리세요!");
       return;
     }
-    throwBall({ dx, upward, curve });
+    throwBall({ dx, upward, curve, spin });
   }
 
   function cancelBallSwipe() {
@@ -511,7 +522,7 @@ export function PocketTrails() {
     setDraggingBall(false);
     setDragOffset({ x: 0, y: 0 });
     setCurvePreview(0);
-    setSpinAngle(0);
+    setSpinDuration(.42);
     setTimingLabel("몬스터볼을 위로 쓸어 올리세요!");
   }
 
@@ -932,7 +943,7 @@ export function PocketTrails() {
                 {berryEffect ? BERRIES[berryEffect].icon : "🍓"}
               </button>
               <button
-                className={`throw ${throwing ? "throwing" : ""} ${draggingBall ? "dragging" : ""} ${curvePreview ? "curving" : ""}`}
+                className={`throw ${throwing ? "throwing" : ""} ${draggingBall ? "dragging" : ""} ${curvePreview > 0 ? "curve-right" : curvePreview < 0 ? "curve-left" : ""}`}
                 style={{
                   "--throw-x": `${throwX}px`,
                   "--throw-y": `${throwY}px`,
@@ -940,7 +951,10 @@ export function PocketTrails() {
                   "--throw-mid-y": `${throwMidY}px`,
                   "--drag-x": `${dragOffset.x}px`,
                   "--drag-y": `${dragOffset.y}px`,
-                  "--spin-angle": `${spinAngle}deg`,
+                  "--spin-duration": `${spinDuration}s`,
+                  "--throw-spin-early": `${throwSpinEarly}deg`,
+                  "--throw-spin-mid": `${throwSpinMid}deg`,
+                  "--throw-spin-end": `${throwSpinEnd}deg`,
                 } as React.CSSProperties}
                 onPointerDown={beginBallSwipe}
                 onPointerMove={moveBallSwipe}
