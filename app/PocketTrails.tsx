@@ -51,6 +51,38 @@ const WORLD_COLUMNS = 9;
 const WORLD_ROWS = 13;
 const WORLD_X_LIMIT = Math.floor(WORLD_COLUMNS / 2);
 const WORLD_Y_LIMIT = Math.floor(WORLD_ROWS / 2);
+const ENCOUNTER_SIZES: Record<string, number> = {
+  leaflet: 150,
+  emberoo: 150,
+  bubbloo: 150,
+  voltbit: 145,
+  mothmoon: 130,
+  rockhorn: 145,
+  cloudle: 135,
+  starling: 145,
+  "monster-009": 170,
+  "monster-010": 170,
+  "monster-011": 170,
+  "monster-012": 180,
+  "monster-013": 175,
+  "monster-014": 135,
+  "monster-015": 145,
+  "monster-016": 145,
+  "monster-017": 185,
+  "monster-018": 185,
+  "monster-019": 205,
+  "monster-020": 205,
+  "monster-021": 140,
+  "monster-022": 220,
+  "monster-023": 215,
+  "monster-024": 215,
+  "monster-025": 215,
+  "monster-026": 215,
+  "monster-027": 220,
+  "monster-028": 220,
+  "monster-029": 220,
+  "monster-030": 145,
+};
 
 function MonsterSprite({ monster }: { monster: Monster }) {
   const isImage = monster.sprite.startsWith("/") || monster.sprite.startsWith("http");
@@ -139,6 +171,8 @@ export function PocketTrails() {
   const lastMotionStep = useRef(0);
   const previousForce = useRef(9.8);
   const throwStart = useRef<{ x: number; y: number } | null>(null);
+  const encounterMonsterSize = selected ? ENCOUNTER_SIZES[selected.monster.id] || 170 : 170;
+  const encounterAimSize = Math.round(Math.max(90, Math.min(150, encounterMonsterSize * .66)));
 
   useEffect(() => {
     const stored = localStorage.getItem("pocket-trails-save");
@@ -754,9 +788,18 @@ export function PocketTrails() {
               <TypeBadges type={selected.monster.type} />
               {berryEffect && <em className="berry-active">{BERRIES[berryEffect].icon} {BERRIES[berryEffect].name}</em>}
             </div>
-            <div className="aim-zone" aria-hidden="true"><i /><span /></div>
             <div className="encounter-monster">
-              <div style={{ "--monster-x": `${monsterX}px` } as React.CSSProperties}><MonsterSprite monster={selected.monster} /></div>
+              <div
+                className="encounter-target"
+                style={{
+                  "--monster-x": `${monsterX}px`,
+                  "--monster-size": `${encounterMonsterSize}px`,
+                  "--aim-size": `${encounterAimSize}px`,
+                } as React.CSSProperties}
+              >
+                <div className="aim-zone" aria-hidden="true"><i /><span /></div>
+                <MonsterSprite monster={selected.monster} />
+              </div>
               <span style={{ "--monster-x": `${monsterX}px` } as React.CSSProperties} />
             </div>
             <div className={`timing-callout ${throwing ? "show" : ""}`}>{timingLabel}</div>
