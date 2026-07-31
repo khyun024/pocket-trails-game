@@ -6,6 +6,7 @@ import { MONSTERS, type Monster } from "./monster-data";
 type Spawn = { key: number; monster: Monster; x: number; y: number };
 type Save = { caught: Record<string, number>; balls: number; greatBalls?: number; ultraBalls?: number; xp: number; steps: number; starter?: string };
 type BallKind = "basic" | "great" | "ultra";
+type KoreaMapView = { name: string; bbox: string; marker: [number, number] };
 
 const initialSave: Save = { caught: {}, balls: 30, greatBalls: 10, ultraBalls: 3, xp: 0, steps: 0 };
 const BALLS = {
@@ -19,6 +20,12 @@ const spawnPoints = [
 const stopPoints = [
   [13, 44], [78, 25], [42, 19], [88, 68], [24, 76], [57, 57], [72, 86],
 ] as const;
+const KOREA_MAPS: KoreaMapView[] = [
+  { name: "대한민국", bbox: "124.2,32.8,132.0,39.3", marker: [36.35, 127.8] },
+  { name: "서울", bbox: "126.72,37.40,127.22,37.72", marker: [37.5665, 126.978] },
+  { name: "부산", bbox: "128.78,34.98,129.35,35.35", marker: [35.1796, 129.0756] },
+  { name: "제주", bbox: "126.05,33.10,127.05,33.65", marker: [33.4996, 126.5312] },
+];
 
 function MonsterSprite({ monster }: { monster: Monster }) {
   const isImage = monster.sprite.startsWith("/") || monster.sprite.startsWith("http");
@@ -50,10 +57,15 @@ function TypeBadges({ type }: { type: string }) {
 }
 
 function chooseMonster(): Monster {
-  const pool = MONSTERS.flatMap((monster) =>
-    Array.from({ length: Math.max(1, 7 - monster.rarity) }, () => monster),
-  );
-  return pool[Math.floor(Math.random() * pool.length)];
+  const rarityWeight: Record<number, number> = { 1: 60, 2: 28, 3: 12, 4: 4, 5: 1 };
+  const totalWeight = MONSTERS.reduce((sum, monster) =>
+    sum + (monster.spawnWeight ?? rarityWeight[monster.rarity] ?? 1), 0);
+  let roll = Math.random() * totalWeight;
+  for (const monster of MONSTERS) {
+    roll -= monster.spawnWeight ?? rarityWeight[monster.rarity] ?? 1;
+    if (roll <= 0) return monster;
+  }
+  return MONSTERS[0];
 }
 
 function createSpawns(seed = Date.now()): Spawn[] {
@@ -71,7 +83,9 @@ export function PocketTrails() {
   const [position, setPosition] = useState({ x: 49, y: 53 });
   const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
   const [selected, setSelected] = useState<Spawn | null>(null);
-  const [tab, setTab] = useState<"map" | "dex" | "bag">("map");
+  const [tab, setTab] = useState<"map" | "korea" | "dex" | "bag">("map");
+  const [koreaMap, setKoreaMap] = useState<KoreaMapView>(KOREA_MAPS[0]);
+  const [gpsPosition, setGpsPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [message, setMessage] = useState("");
   const [throwing, setThrowing] = useState(false);
   const [selectedBall, setSelectedBall] = useState<BallKind>("basic");
@@ -323,6 +337,7 @@ export function PocketTrails() {
     if (gpsWatchId.current !== null) return;
     gpsWatchId.current = navigator.geolocation.watchPosition(({ coords }) => {
       const current = { lat: coords.latitude, lng: coords.longitude };
+      setGpsPosition(current);
       const movementThreshold = 0.5;
       setGpsInfo({
         accuracy: Math.round(coords.accuracy),
@@ -433,6 +448,38 @@ export function PocketTrails() {
             </div>
           )}
 
+          {tab === "korea" && (
+            <div className="korea-map-view">
+              <div className="korea-heading">
+                <span>KOREA EXPLORER MAP</span>
+                <h1>대한민국 지도</h1>
+                <p>지역 버튼을 눌러 실제 지도를 확대해 보세요.</p>
+              </div>
+              <div className="korea-region-buttons">
+                {KOREA_MAPS.map((view) => (
+                  <button key={view.name} className={koreaMap.name === view.name ? "active" : ""} onClick={() => setKoreaMap(view)}>
+                    {view.name}
+                  </button>
+                ))}
+                {gpsPosition && (
+                  <button onClick={() => setKoreaMap({
+                    name: "내 위치",
+                    bbox: `${gpsPosition.lng - .12},${gpsPosition.lat - .08},${gpsPosition.lng + .12},${gpsPosition.lat + .08}`,
+                    marker: [gpsPosition.lat, gpsPosition.lng],
+                  })}>내 위치</button>
+                )}
+              </div>
+              <div className="korea-map-frame">
+                <iframe
+                  title={`${koreaMap.name} 실제 지도`}
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(koreaMap.bbox)}&layer=mapnik&marker=${koreaMap.marker[0]}%2C${koreaMap.marker[1]}`}
+                  loading="lazy"
+                />
+                <span>지도 데이터 © OpenStreetMap 기여자</span>
+              </div>
+            </div>
+          )}
+
           {tab === "dex" && (
             <div className="content-panel">
               <div className="panel-heading"><span>FIELD NOTES</span><h1>탐험 도감</h1><p>{discovered} / {MONSTERS.length}종 발견</p></div>
@@ -476,6 +523,7 @@ export function PocketTrails() {
 
         <nav className="bottom-nav">
           <button className={tab === "map" ? "active" : ""} onClick={() => setTab("map")}><i>⌖</i><span>지도</span></button>
+          <button className={tab === "korea" ? "active" : ""} onClick={() => setTab("korea")}><i>🇰🇷</i><span>대한민국</span></button>
           <button className={tab === "dex" ? "active" : ""} onClick={() => setTab("dex")}><i>▦</i><span>도감</span></button>
           <button className={tab === "bag" ? "active" : ""} onClick={() => setTab("bag")}><i>◉</i><span>가방</span></button>
         </nav>
