@@ -13,12 +13,6 @@ const BALLS = {
   great: { name: "슈퍼볼", key: "greatBalls" as const, bonus: 1.35 },
   ultra: { name: "하이퍼볼", key: "ultraBalls" as const, bonus: 1.25 },
 };
-const spawnPoints = [
-  [34, 22], [66, 30], [43, 48], [62, 58], [29, 68], [70, 77], [25, 89],
-] as const;
-const stopPoints = [
-  [28, 25], [40, 35], [67, 38], [42, 52], [59, 61], [29, 70], [70, 78], [25, 88],
-] as const;
 const WORLD_COLUMNS = 9;
 const WORLD_ROWS = 13;
 const WORLD_X_LIMIT = Math.floor(WORLD_COLUMNS / 2);
@@ -65,12 +59,17 @@ function chooseMonster(): Monster {
   return MONSTERS[0];
 }
 
+function seededUnit(seed: number, salt: number) {
+  const value = Math.sin(seed * .0001 + salt * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 function createSpawns(seed = Date.now()): Spawn[] {
-  return spawnPoints.map(([x, y], index) => ({
+  return Array.from({ length: 7 }, (_, index) => ({
     key: seed + index,
     monster: chooseMonster(),
-    x,
-    y,
+    x: 12 + seededUnit(seed, index * 2 + 1) * 76,
+    y: 16 + seededUnit(seed, index * 2 + 2) * 68,
   }));
 }
 
@@ -157,7 +156,50 @@ export function PocketTrails() {
   const caughtTotal = Object.values(save.caught).reduce((a, b) => a + b, 0);
   const discovered = Object.keys(save.caught).length;
   const worldSector = (mapOffset.y + WORLD_Y_LIMIT) * WORLD_COLUMNS + mapOffset.x + WORLD_X_LIMIT + 1;
-  const biome = Math.abs(mapOffset.x * 3 + mapOffset.y * 5) % 3;
+  const terrain = useMemo(() => {
+    const seed = (mapOffset.x + WORLD_X_LIMIT + 1) * 1009 + (mapOffset.y + WORLD_Y_LIMIT + 1) * 9176;
+    const random = (salt: number) => seededUnit(seed, salt);
+    const variant = Math.floor(random(1) * 5);
+    const roadCount = 2 + Math.floor(random(2) * 3);
+    const parkCount = 1 + Math.floor(random(3) * 3);
+    const waterRoll = random(4);
+    const waterKind = waterRoll < .28 ? "none" : waterRoll < .58 ? "river" : waterRoll < .82 ? "lake" : "coast";
+    return {
+      variant,
+      roads: Array.from({ length: roadCount }, (_, index) => ({
+        top: 12 + random(10 + index) * 76,
+        angle: -65 + random(20 + index) * 130,
+        height: 48 + random(30 + index) * 34,
+        left: -28 + random(40 + index) * 12,
+      })),
+      parks: Array.from({ length: parkCount }, (_, index) => ({
+        left: -8 + random(50 + index) * 82,
+        top: 8 + random(60 + index) * 70,
+        width: 90 + random(70 + index) * 105,
+        height: 70 + random(80 + index) * 95,
+        radius: 28 + random(90 + index) * 35,
+        rotate: -18 + random(100 + index) * 36,
+      })),
+      waterKind,
+      water: {
+        left: waterKind === "coast" ? 62 + random(111) * 12 : 8 + random(112) * 68,
+        top: waterKind === "lake" ? 18 + random(113) * 54 : -15,
+        width: waterKind === "coast" ? 54 : waterKind === "lake" ? 105 + random(114) * 75 : 45 + random(115) * 48,
+        height: waterKind === "lake" ? 90 + random(116) * 65 : 130,
+        rotate: waterKind === "river" ? -24 + random(117) * 48 : 0,
+      },
+      features: Array.from({ length: 9 }, (_, index) => ({
+        left: 5 + random(130 + index) * 90,
+        top: 9 + random(150 + index) * 78,
+        size: 8 + random(170 + index) * 19,
+        rotate: random(190 + index) * 180,
+      })),
+      stops: Array.from({ length: 8 }, (_, index) => [
+        10 + random(210 + index * 2) * 80,
+        14 + random(211 + index * 2) * 72,
+      ] as const),
+    };
+  }, [mapOffset.x, mapOffset.y]);
 
   const nearby = useMemo(() => spawns.map((spawn) => ({
     ...spawn,
@@ -404,16 +446,22 @@ export function PocketTrails() {
 
         <section className={`game-view ${tab !== "map" ? "panel-view" : ""}`}>
           {tab === "map" && (
-            <div className={`map biome-${biome}`} aria-label="이어지는 대형 탐험 지도">
-              <div className="map-shade" style={{ backgroundPosition: `${mapOffset.x * 95}px ${mapOffset.y * 75}px` }} />
-              <div className="park park-a" />
-              <div className="park park-b" />
-              <div className="water" style={{ right: `${8 + biome * 27}%` }} />
-              <div className="road road-a" style={{ translate: `${mapOffset.x * 9}px ${mapOffset.y * 3}px` }} />
-              <div className="road road-b" style={{ translate: `${mapOffset.y * -7}px ${mapOffset.x * 4}px` }} />
-              <div className="road road-c" style={{ translate: `${mapOffset.x * -6}px ${mapOffset.y * -4}px` }} />
+            <div className={`map biome-${terrain.variant}`} aria-label="이어지는 대형 탐험 지도">
+              <div className="map-shade" style={{ backgroundPosition: `${mapOffset.x * 95}px ${mapOffset.y * 75}px`, transform: `rotate(${terrain.variant * 7 - 12}deg) scale(1.18)` }} />
+              <div className={`terrain-features terrain-${terrain.variant}`}>
+                {terrain.features.map((feature, index) => <i key={index} style={{ left: `${feature.left}%`, top: `${feature.top}%`, width: feature.size, height: feature.size, rotate: `${feature.rotate}deg` }} />)}
+              </div>
+              {terrain.parks.map((park, index) => <div key={`park-${index}`} className="park" style={{ left: `${park.left}%`, top: `${park.top}%`, width: park.width, height: park.height, borderRadius: `${park.radius}%`, transform: `rotate(${park.rotate}deg)` }} />)}
+              {terrain.waterKind !== "none" && <div className={`water water-${terrain.waterKind}`} style={{
+                left: `${terrain.water.left}%`,
+                top: `${terrain.water.top}%`,
+                width: terrain.waterKind === "coast" ? "54%" : terrain.water.width,
+                height: terrain.waterKind === "lake" ? terrain.water.height : `${terrain.water.height}%`,
+                transform: `rotate(${terrain.water.rotate}deg)`,
+              }} />}
+              {terrain.roads.map((road, index) => <div key={`road-${index}`} className="road" style={{ top: `${road.top}%`, left: `${road.left}%`, height: road.height, transform: `rotate(${road.angle}deg)` }} />)}
               <div className="world-sector"><b>{worldSector}</b><span>/ {WORLD_COLUMNS * WORLD_ROWS} 구역</span></div>
-              {stopPoints.map(([x, y], index) => (
+              {terrain.stops.map(([x, y], index) => (
                 <button key={`${mapOffset.x}-${mapOffset.y}-${index}`} className="stop" style={{ left: `${x}%`, top: `${y}%` }} onClick={refill} aria-label="포켓스탑">◈</button>
               ))}
               {spawns.map((spawn) => (

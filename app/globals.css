@@ -16,14 +16,15 @@ button:focus-visible { outline:3px solid #ffb640; outline-offset:2px; }
 .weather small { font-size:10px; font-weight:700; }
 .game-view { height:calc(100% - 74px); }
 .map { position:relative; width:100%; height:100%; overflow:hidden; background:#e6e1ce; }
-.map.biome-1 { background:#e0e4cf; }.map.biome-2 { background:#d8e6d8; }
+.map.biome-0 { background:#e6e1ce; }.map.biome-1 { background:#dfe4ce; }.map.biome-2 { background:#d7e4d8; }.map.biome-3 { background:#eadfca; }.map.biome-4 { background:#d8e5df; }
 .world-sector { position:absolute; z-index:8; left:18px; top:82px; display:flex; align-items:baseline; gap:4px; padding:8px 11px; border-radius:13px; background:#fffdf4e8; color:#17342e; box-shadow:0 5px 16px #17342e20; backdrop-filter:blur(7px); }.world-sector b { font:18px "Black Han Sans"; }.world-sector span { color:#687f77; font-size:8px; font-weight:800; }
-.map-shade { position:absolute; inset:0; background:linear-gradient(28deg,transparent 30%,#d7e7d0 31% 50%,transparent 51%),repeating-linear-gradient(78deg,transparent 0 70px,#d4cdb7 71px 73px,transparent 74px 150px); opacity:.72; }
+.map-shade { position:absolute; inset:-20%; background:linear-gradient(28deg,transparent 30%,#d7e7d0 31% 50%,transparent 51%),repeating-linear-gradient(78deg,transparent 0 70px,#d4cdb7 71px 73px,transparent 74px 150px); opacity:.55; }
 .road { position:absolute; width:130%; height:76px; left:-15%; background:#faf7e9; border:2px solid #ded9c6; box-shadow:0 0 0 10px #ebe5d4; }
 .road-a { top:42%; transform:rotate(-13deg); }.road-b { top:18%; transform:rotate(58deg); }.road-c { top:78%; transform:rotate(18deg); }
 .park { position:absolute; display:flex; align-items:end; padding:15px; color:#5d966e; background:#bfe0b8; border:2px solid #9dcc9a; border-radius:45% 55% 58% 42%; font-size:10px; font-weight:800; letter-spacing:.05em; }
 .park-a { width:165px; height:125px; left:-25px; top:12%; transform:rotate(8deg); }.park-b { width:160px; height:130px; right:-35px; bottom:13%; }
-.water { position:absolute; width:65px; height:120%; right:10%; top:-10%; background:#a8dbe0; border-left:3px solid #8ccbd2; border-right:3px solid #8ccbd2; transform:rotate(13deg); }
+.water { position:absolute; right:auto; background:#a8dbe0; border:3px solid #8ccbd2; }.water-river { border-radius:42% 55% 38% 60%; }.water-lake { border-radius:50%; }.water-coast { border-radius:55% 0 0 45%; }
+.terrain-features { position:absolute; z-index:1; inset:0; pointer-events:none; }.terrain-features i { position:absolute; display:block; opacity:.48; }.terrain-0 i { border-radius:50% 50% 45% 45%; background:#6ca66d; box-shadow:8px 6px 0 #82b67a; }.terrain-1 i { border:2px solid #b7aa94; border-radius:3px; background:#d6cbb8; }.terrain-2 i { background:#9faf79; clip-path:polygon(50% 0,100% 100%,0 100%); }.terrain-3 i { border-radius:50%; background:#d7b96e; box-shadow:0 0 0 4px #ead6a2; }.terrain-4 i { border-radius:55% 45%; background:#79b7b0; box-shadow:6px -4px 0 #a8d4c9; }
 .map-title { position:absolute; top:80px; left:18px; display:flex; flex-direction:column; padding:10px 14px; background:#fffdf4e8; border-left:4px solid var(--green); box-shadow:0 5px 20px #3c544522; backdrop-filter:blur(8px); }
 .map-title span { color:#748b83; font-size:9px; font-weight:700; }.map-title b { font-size:16px; }
 .spawn { position:absolute; z-index:5; width:58px; height:66px; padding:0; border:0; background:none; transform:translate(-50%,-50%); cursor:pointer; animation:bob 2.2s ease-in-out infinite; }
