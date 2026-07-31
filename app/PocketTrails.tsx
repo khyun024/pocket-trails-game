@@ -16,6 +16,8 @@ type Save = {
   nanabBerries: number;
   pinapBerries: number;
   raidPasses: number;
+  stopCooldowns?: Record<string, number>;
+  chargeCooldownUntil?: number;
   xp: number;
   steps: number;
   starter?: string;
@@ -33,6 +35,8 @@ const initialSave: Save = {
   nanabBerries: 7,
   pinapBerries: 5,
   raidPasses: 3,
+  stopCooldowns: {},
+  chargeCooldownUntil: 0,
   xp: 0,
   steps: 0,
 };
@@ -47,6 +51,8 @@ const BERRIES = {
   pinap: { name: "파인열매", icon: "🍍", key: "pinapBerries" as const, description: "포획 사탕 2배" },
 };
 const RAID_BOSSES = MONSTERS.filter((monster) => monster.raidOnly);
+const POKESTOP_COOLDOWN_MS = 30_000;
+const CHARGE_STATION_COOLDOWN_MS = 30_000;
 const WORLD_COLUMNS = 9;
 const WORLD_ROWS = 13;
 const WORLD_X_LIMIT = Math.floor(WORLD_COLUMNS / 2);
@@ -200,6 +206,10 @@ export function PocketTrails() {
   const [berryMenuOpen, setBerryMenuOpen] = useState(false);
   const [berryEffect, setBerryEffect] = useState<BerryKind | null>(null);
   const [raidOpen, setRaidOpen] = useState(false);
+  const [activeRaidBoss, setActiveRaidBoss] = useState<Monster | null>(null);
+  const [stopCooldowns, setStopCooldowns] = useState<Record<string, number>>({});
+  const [chargeCooldownUntil, setChargeCooldownUntil] = useState(0);
+  const [cooldownNow, setCooldownNow] = useState(Date.now());
   const [loaded, setLoaded] = useState(false);
   const [gps, setGps] = useState<"off" | "loading" | "on" | "error">("off");
   const [gpsInfo, setGpsInfo] = useState<{ accuracy: number; threshold: number; updated: string } | null>(null);
@@ -218,7 +228,12 @@ export function PocketTrails() {
   useEffect(() => {
     const stored = localStorage.getItem("pocket-trails-save");
     if (stored) {
-      try { setSave({ ...initialSave, ...JSON.parse(stored) }); } catch { /* 새 저장으로 시작 */ }
+      try {
+        const restored = { ...initialSave, ...JSON.parse(stored) } as Save;
+        setSave(restored);
+        setStopCooldowns(restored.stopCooldowns || {});
+        setChargeCooldownUntil(restored.chargeCooldownUntil || 0);
+      } catch { /* 새 저장으로 시작 */ }
     }
     setSpawns(createSpawns());
     setLoaded(true);
@@ -231,7 +246,7 @@ export function PocketTrails() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (selected || tab !== "map") return;
+      if (selected || raidOpen || tab !== "map") return;
       const delta: Record<string, [number, number]> = {
         ArrowUp: [0, -3], w: [0, -3], ArrowDown: [0, 3], s: [0, 3],
         ArrowLeft: [-3, 0], a: [-3, 0], ArrowRight: [3, 0], d: [3, 0],
@@ -244,6 +259,11 @@ export function PocketTrails() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCooldownNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => () => {
     if (gpsWatchId.current !== null) navigator.geolocation.clearWatch(gpsWatchId.current);
@@ -330,6 +350,7 @@ export function PocketTrails() {
   }
 
   function moveAcrossMap(dx: number, dy: number) {
+    if (raidOpen) return;
     setPosition((p) => ({
       ...(() => {
         let x = p.x + dx, y = p.y + dy, mapX = 0, mapY = 0;
@@ -518,20 +539,22 @@ export function PocketTrails() {
       return;
     }
     setSave((current) => ({ ...current, raidPasses: current.raidPasses - 1 }));
+    setActiveRaidBoss(raidBoss);
     setRaidOpen(true);
   }
 
-  function finishRaid() {
+  function finishRaid(defeatedBoss: Monster) {
     setRaidOpen(false);
+    setActiveRaidBoss(null);
     setMonsterX(92);
     setTimingLabel("레이드 보상 포획! 볼을 위로 던지세요.");
     setBerryEffect(null);
-    setSelected({ key: Date.now(), monster: raidBoss, x: position.x, y: position.y });
-    setMessage(`${raidBoss.name} 레이드 승리! 포획 기회 획득!`);
+    setSelected({ key: Date.now(), monster: defeatedBoss, x: position.x, y: position.y });
+    setMessage(`${defeatedBoss.name} 레이드 승리! 포획 기회 획득!`);
     setTimeout(() => setMessage(""), 2200);
   }
 
-  function refill() {
+  function grantItems() {
     setSave((s) => ({
       ...s,
       balls: s.balls + 6,
@@ -542,7 +565,38 @@ export function PocketTrails() {
       pinapBerries: s.pinapBerries + 2,
       raidPasses: s.raidPasses + 1,
     }));
-    setMessage("가방 제한 없이 아이템을 받았어요!");
+  }
+
+  function usePokestop(stopId: string) {
+    const now = Date.now();
+    const cooldownUntil = stopCooldowns[stopId] || 0;
+    if (cooldownUntil > now) {
+      setMessage(`포켓스탑 충전까지 ${Math.ceil((cooldownUntil - now) / 1000)}초`);
+      setTimeout(() => setMessage(""), 1300);
+      return;
+    }
+    grantItems();
+    const nextCooldowns = { ...stopCooldowns, [stopId]: now + POKESTOP_COOLDOWN_MS };
+    setStopCooldowns(nextCooldowns);
+    setSave((current) => ({ ...current, stopCooldowns: nextCooldowns }));
+    setCooldownNow(now);
+    setMessage("포켓스탑에서 아이템을 받았어요! 30초 후 재충전");
+    setTimeout(() => setMessage(""), 1800);
+  }
+
+  function useChargeStation() {
+    const now = Date.now();
+    if (chargeCooldownUntil > now) {
+      setMessage(`충전소 재사용까지 ${Math.ceil((chargeCooldownUntil - now) / 1000)}초`);
+      setTimeout(() => setMessage(""), 1300);
+      return;
+    }
+    grantItems();
+    const nextCooldown = now + CHARGE_STATION_COOLDOWN_MS;
+    setChargeCooldownUntil(nextCooldown);
+    setSave((current) => ({ ...current, chargeCooldownUntil: nextCooldown }));
+    setCooldownNow(now);
+    setMessage("충전 완료! 30초 후 다시 이용할 수 있어요.");
     setTimeout(() => setMessage(""), 1800);
   }
 
@@ -707,9 +761,17 @@ export function PocketTrails() {
               }} />}
               {terrain.roads.map((road, index) => <div key={`road-${index}`} className="road" style={{ top: `${road.top}%`, left: `${road.left}%`, height: road.height, transform: `rotate(${road.angle}deg)` }} />)}
               <div className="world-sector"><b>{worldSector}</b><span>/ {WORLD_COLUMNS * WORLD_ROWS} 구역</span></div>
-              {terrain.stops.map(([x, y], index) => (
-                <button key={`${mapOffset.x}-${mapOffset.y}-${index}`} className="stop" style={{ left: `${x}%`, top: `${y}%` }} onClick={refill} aria-label="포켓스탑">◈</button>
-              ))}
+              {terrain.stops.map(([x, y], index) => {
+                const stopId = `${mapOffset.x}-${mapOffset.y}-${index}`;
+                const coolingDown = (stopCooldowns[stopId] || 0) > cooldownNow;
+                return <button
+                  key={stopId}
+                  className={`stop ${coolingDown ? "cooldown" : ""}`}
+                  style={{ left: `${x}%`, top: `${y}%` }}
+                  onClick={() => usePokestop(stopId)}
+                  aria-label={coolingDown ? "포켓스탑 충전 중" : "포켓스탑"}
+                >◈</button>;
+              })}
               <button className="raid-gym" style={{ left: `${terrain.stops[0][0]}%`, top: `${Math.min(82, terrain.stops[0][1] + 10)}%` }} onClick={startRaid} aria-label={`${raidBoss.name} 레이드 참가`}>
                 <i>⚔</i><b>RAID</b><span>{raidBoss.name}</span>
               </button>
@@ -823,9 +885,21 @@ export function PocketTrails() {
                 <div><span className="item-emoji">🍌</span><p><b>나나열매</b><small>포켓몬 움직임을 늦춰요</small></p><strong>{save.nanabBerries}</strong></div>
                 <div><span className="item-emoji">🍍</span><p><b>파인열매</b><small>받는 사탕이 2배가 돼요</small></p><strong>{save.pinapBerries}</strong></div>
                 <div><span className="item-emoji">🎟️</span><p><b>레이드패스</b><small>전설 레이드 입장권</small></p><strong>{save.raidPasses}</strong></div>
-                <button onClick={refill}>충전소 이용하기</button>
+                <button
+                  className={chargeCooldownUntil > cooldownNow ? "cooldown" : ""}
+                  onClick={useChargeStation}
+                >
+                  {chargeCooldownUntil > cooldownNow
+                    ? `충전 중 · ${Math.ceil((chargeCooldownUntil - cooldownNow) / 1000)}초`
+                    : "충전소 이용하기"}
+                </button>
               </section>
-              <button className="reset" onClick={() => { setSave(initialSave); setSpawns(createSpawns()); }}>저장 기록 초기화</button>
+              <button className="reset" onClick={() => {
+                setSave(initialSave);
+                setStopCooldowns({});
+                setChargeCooldownUntil(0);
+                setSpawns(createSpawns());
+              }}>저장 기록 초기화</button>
             </div>
           )}
         </section>
@@ -838,7 +912,11 @@ export function PocketTrails() {
           <button className={tab === "bag" ? "active" : ""} onClick={() => setTab("bag")}><i>◉</i><span>가방</span></button>
         </nav>
 
-        {raidOpen && <RaidBattle boss={raidBoss} onClose={() => setRaidOpen(false)} onWin={finishRaid} />}
+        {raidOpen && activeRaidBoss && <RaidBattle
+          boss={activeRaidBoss}
+          onClose={() => { setRaidOpen(false); setActiveRaidBoss(null); }}
+          onWin={() => finishRaid(activeRaidBoss)}
+        />}
 
         {selected && (
           <div className={`encounter ${impacting ? "impacting" : ""}`} style={{ "--accent": selected.monster.color } as React.CSSProperties}>
