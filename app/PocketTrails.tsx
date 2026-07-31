@@ -4,12 +4,47 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MONSTERS, type Monster } from "./monster-data";
 
 type Spawn = { key: number; monster: Monster; x: number; y: number };
-type Save = { caught: Record<string, number>; balls: number; xp: number; steps: number };
+type Save = { caught: Record<string, number>; balls: number; greatBalls?: number; ultraBalls?: number; xp: number; steps: number; starter?: string };
+type BallKind = "basic" | "great" | "ultra";
 
-const initialSave: Save = { caught: {}, balls: 30, xp: 0, steps: 0 };
+const initialSave: Save = { caught: {}, balls: 30, greatBalls: 10, ultraBalls: 3, xp: 0, steps: 0 };
+const BALLS = {
+  basic: { name: "몬스터볼", key: "balls" as const, bonus: 1 },
+  great: { name: "슈퍼볼", key: "greatBalls" as const, bonus: 1.35 },
+  ultra: { name: "하이퍼볼", key: "ultraBalls" as const, bonus: 1.25 },
+};
 const spawnPoints = [
   [17, 24], [72, 18], [84, 42], [31, 67], [67, 74], [12, 82],
 ] as const;
+const stopPoints = [
+  [13, 44], [78, 25], [42, 19], [88, 68], [24, 76], [57, 57], [72, 86],
+] as const;
+
+function MonsterSprite({ monster }: { monster: Monster }) {
+  const isImage = monster.sprite.startsWith("/") || monster.sprite.startsWith("http");
+  return isImage
+    ? <span className="monster-image-wrap">
+        <span className="monster-image-fallback">?</span>
+        <img className="monster-image" src={monster.sprite} alt={monster.name} draggable={false}
+          onError={(event) => { event.currentTarget.style.display = "none"; }} />
+      </span>
+    : <span aria-label={monster.name}>{monster.sprite}</span>;
+}
+
+const TYPE_COLORS: Record<string, string> = {
+  "풀": "#56a94f", "독": "#9b5bc1", "불꽃": "#ed6b45", "물": "#4d9bdc",
+  "전기": "#d9b82f", "벌레": "#8dac3d", "바위": "#9c8263", "비행": "#7eadd2",
+  "에스퍼": "#d66fa9", "얼음": "#62bdc9", "고스트": "#7662a5", "드래곤": "#666bc4",
+  "강철": "#7e929a", "땅": "#b88b55", "노말": "#8d9189", "페어리": "#d985ba",
+};
+
+function TypeBadges({ type }: { type: string }) {
+  return <span className="type-badges">
+    {type.split("/").map((item) => (
+      <b key={item} style={{ "--type-color": TYPE_COLORS[item] || "#71877e" } as React.CSSProperties}>{item}</b>
+    ))}
+  </span>;
+}
 
 function chooseMonster(): Monster {
   const pool = MONSTERS.flatMap((monster) =>
@@ -31,14 +66,23 @@ export function PocketTrails() {
   const [save, setSave] = useState<Save>(initialSave);
   const [spawns, setSpawns] = useState<Spawn[]>([]);
   const [position, setPosition] = useState({ x: 49, y: 53 });
+  const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
   const [selected, setSelected] = useState<Spawn | null>(null);
   const [tab, setTab] = useState<"map" | "dex" | "bag">("map");
   const [message, setMessage] = useState("");
   const [throwing, setThrowing] = useState(false);
+  const [selectedBall, setSelectedBall] = useState<BallKind>("basic");
   const [loaded, setLoaded] = useState(false);
   const [gps, setGps] = useState<"off" | "loading" | "on" | "error">("off");
+  const [gpsInfo, setGpsInfo] = useState<{ accuracy: number; threshold: number; updated: string } | null>(null);
+  const [motion, setMotion] = useState<"off" | "loading" | "on" | "error">("off");
   const gpsOrigin = useRef<{ lat: number; lng: number } | null>(null);
   const lastGps = useRef<{ lat: number; lng: number } | null>(null);
+  const gpsWatchId = useRef<number | null>(null);
+  const testDistance = useRef(0);
+  const heading = useRef(0);
+  const lastMotionStep = useRef(0);
+  const previousForce = useRef(9.8);
 
   useEffect(() => {
     const stored = localStorage.getItem("pocket-trails-save");
@@ -70,6 +114,12 @@ export function PocketTrails() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  useEffect(() => () => {
+    if (gpsWatchId.current !== null) navigator.geolocation.clearWatch(gpsWatchId.current);
+    window.removeEventListener("deviceorientation", handleOrientation);
+    window.removeEventListener("devicemotion", handleMotion);
+  }, []);
+
   const level = Math.floor(save.xp / 100) + 1;
   const caughtTotal = Object.values(save.caught).reduce((a, b) => a + b, 0);
   const discovered = Object.keys(save.caught).length;
@@ -80,11 +130,27 @@ export function PocketTrails() {
   })).sort((a, b) => a.distance - b.distance), [spawns, position]);
 
   function move(dx: number, dy: number) {
-    setPosition((p) => ({
-      x: Math.max(6, Math.min(94, p.x + dx)),
-      y: Math.max(8, Math.min(90, p.y + dy)),
-    }));
+    moveAcrossMap(dx, dy);
     setSave((s) => ({ ...s, steps: s.steps + 1 }));
+  }
+
+  function moveAcrossMap(dx: number, dy: number) {
+    setPosition((p) => ({
+      ...(() => {
+        let x = p.x + dx, y = p.y + dy, mapX = 0, mapY = 0;
+        if (x > 94) { x = 7; mapX = 1; }
+        if (x < 6) { x = 93; mapX = -1; }
+        if (y > 91) { y = 9; mapY = 1; }
+        if (y < 8) { y = 90; mapY = -1; }
+        if (mapX || mapY) {
+          setMapOffset((offset) => ({ x: offset.x + mapX, y: offset.y + mapY }));
+          setSpawns(createSpawns());
+          setMessage("새로운 구역에 도착했어요!");
+          setTimeout(() => setMessage(""), 1300);
+        }
+        return { x, y };
+      })(),
+    }));
   }
 
   function openEncounter(spawn: Spawn) {
@@ -98,12 +164,14 @@ export function PocketTrails() {
   }
 
   function throwBall() {
-    if (!selected || save.balls < 1 || throwing) return;
+    const ball = BALLS[selectedBall];
+    if (!selected || (save[ball.key] || 0) < 1 || throwing) return;
     setThrowing(true);
-    setSave((s) => ({ ...s, balls: s.balls - 1 }));
+    setSave((s) => ({ ...s, [ball.key]: Math.max(0, (s[ball.key] || 0) - 1) }));
     const target = selected;
     setTimeout(() => {
-      const caught = Math.random() < Math.max(.38, .86 - target.monster.rarity * .09);
+      const baseRate = target.monster.catchRate ?? Math.max(.25, .86 - target.monster.rarity * .09);
+      const caught = Math.random() < Math.min(.96, baseRate * ball.bonus);
       if (caught) {
         setSave((s) => ({
           ...s,
@@ -122,9 +190,9 @@ export function PocketTrails() {
   }
 
   function refill() {
-    if (save.balls >= 30) return;
-    setSave((s) => ({ ...s, balls: 30 }));
-    setMessage("탐험볼을 30개 채웠어요!");
+    if (save.balls >= 30 && (save.greatBalls || 0) >= 10 && (save.ultraBalls || 0) >= 3) return;
+    setSave((s) => ({ ...s, balls: 30, greatBalls: 10, ultraBalls: 3 }));
+    setMessage("모든 볼을 충전했어요!");
     setTimeout(() => setMessage(""), 1800);
   }
 
@@ -134,6 +202,77 @@ export function PocketTrails() {
     setTimeout(() => setMessage(""), 1800);
   }
 
+  function simulateWalk() {
+    testDistance.current += 0.5;
+    moveAcrossMap(1.1, Math.sin(testDistance.current / 3) * 1.2);
+    setSave((s) => ({ ...s, steps: s.steps + 1 }));
+    setMessage(`테스트 이동 ${testDistance.current}m`);
+    if (testDistance.current % 25 === 0) {
+      setSpawns(createSpawns());
+      setMessage("테스트 25m 완료 · 주변 몬스터 갱신!");
+    }
+    setTimeout(() => setMessage(""), 900);
+  }
+
+  function handleOrientation(event: DeviceOrientationEvent) {
+    if (typeof event.alpha === "number") heading.current = event.alpha;
+  }
+
+  function handleMotion(event: DeviceMotionEvent) {
+    const rotation = event.rotationRate;
+    const rotationSpeed = rotation
+      ? Math.hypot(rotation.alpha || 0, rotation.beta || 0, rotation.gamma || 0)
+      : 0;
+    if (rotationSpeed > 35) return;
+
+    const linear = event.acceleration;
+    let change = 0;
+    if (linear && (linear.x !== null || linear.y !== null || linear.z !== null)) {
+      change = Math.hypot(linear.x || 0, linear.y || 0, linear.z || 0);
+    } else {
+      const gravity = event.accelerationIncludingGravity;
+      if (!gravity) return;
+      const force = Math.hypot(gravity.x || 0, gravity.y || 0, gravity.z || 0);
+      change = Math.abs(force - previousForce.current);
+      previousForce.current = force;
+    }
+    const now = Date.now();
+    if (change < 1.15 || now - lastMotionStep.current < 420) return;
+    lastMotionStep.current = now;
+    const radians = heading.current * Math.PI / 180;
+    moveAcrossMap(Math.sin(radians) * 2.1, -Math.cos(radians) * 2.1);
+    setSave((s) => ({ ...s, steps: s.steps + 1 }));
+    testDistance.current += 1;
+    if (testDistance.current % 25 === 0) {
+      setSpawns(createSpawns());
+      setMessage("25걸음 이동 · 주변 몬스터 갱신!");
+      setTimeout(() => setMessage(""), 1400);
+    }
+  }
+
+  async function startMotion() {
+    setMotion("loading");
+    try {
+      const MotionEvent = DeviceMotionEvent as typeof DeviceMotionEvent & {
+        requestPermission?: () => Promise<"granted" | "denied">;
+      };
+      const OrientationEvent = DeviceOrientationEvent as typeof DeviceOrientationEvent & {
+        requestPermission?: () => Promise<"granted" | "denied">;
+      };
+      if (MotionEvent.requestPermission && await MotionEvent.requestPermission() !== "granted") throw new Error();
+      if (OrientationEvent.requestPermission && await OrientationEvent.requestPermission() !== "granted") throw new Error();
+      window.addEventListener("deviceorientation", handleOrientation);
+      window.addEventListener("devicemotion", handleMotion);
+      setMotion("on");
+      setMessage("동작 센서 연결 완료 · 휴대폰을 들고 움직여 보세요!");
+      setTimeout(() => setMessage(""), 2200);
+    } catch {
+      setMotion("error");
+      setMessage("동작 및 방향 접근 권한이 필요해요.");
+      setTimeout(() => setMessage(""), 2200);
+    }
+  }
+
   function startGps() {
     if (!navigator.geolocation) {
       setGps("error");
@@ -141,29 +280,54 @@ export function PocketTrails() {
       return;
     }
     setGps("loading");
-    navigator.geolocation.watchPosition(({ coords }) => {
+    if (gpsWatchId.current !== null) return;
+    gpsWatchId.current = navigator.geolocation.watchPosition(({ coords }) => {
       const current = { lat: coords.latitude, lng: coords.longitude };
-      if (!gpsOrigin.current) gpsOrigin.current = current;
+      const movementThreshold = 0.5;
+      setGpsInfo({
+        accuracy: Math.round(coords.accuracy),
+        threshold: Math.round(movementThreshold),
+        updated: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      });
+      if (!gpsOrigin.current) {
+        gpsOrigin.current = current;
+        setPosition({ x: 49, y: 53 });
+        setMessage(`현재 위치를 찾았어요 · 오차 약 ${Math.round(coords.accuracy)}m`);
+        setTimeout(() => setMessage(""), 2300);
+      }
       if (lastGps.current) {
         const latMeters = (current.lat - lastGps.current.lat) * 111_000;
         const lngMeters = (current.lng - lastGps.current.lng) * 88_000;
         const walked = Math.hypot(latMeters, lngMeters);
-        if (walked > 3) {
+        if (walked > movementThreshold) {
           setPosition((p) => ({
             x: Math.max(6, Math.min(94, p.x + lngMeters / 4)),
             y: Math.max(8, Math.min(90, p.y - latMeters / 4)),
           }));
-          setSave((s) => ({ ...s, steps: s.steps + Math.max(1, Math.round(walked / 3)) }));
+          setSave((s) => ({ ...s, steps: s.steps + Math.max(1, Math.round(walked / movementThreshold)) }));
           if (walked > 25) setSpawns(createSpawns());
         }
       }
       lastGps.current = current;
       setGps("on");
     }, () => {
+      if (gpsWatchId.current !== null) navigator.geolocation.clearWatch(gpsWatchId.current);
+      gpsWatchId.current = null;
       setGps("error");
+      setGpsInfo(null);
       setMessage("위치 권한을 허용하면 실제 걸음으로 탐험할 수 있어요.");
       setTimeout(() => setMessage(""), 2800);
     }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 12000 });
+  }
+
+  function chooseStarter(monster: Monster) {
+    setSave((s) => ({
+      ...s,
+      starter: monster.id,
+      caught: { ...s.caught, [monster.id]: Math.max(1, s.caught[monster.id] || 0) },
+    }));
+    setMessage(`${monster.name}와(과) 모험을 시작합니다!`);
+    setTimeout(() => setMessage(""), 2300);
   }
 
   return (
@@ -178,13 +342,14 @@ export function PocketTrails() {
         <section className={`game-view ${tab !== "map" ? "panel-view" : ""}`}>
           {tab === "map" && (
             <div className="map" aria-label="탐험 지도">
-              <div className="map-shade" />
+              <div className="map-shade" style={{ backgroundPosition: `${mapOffset.x * 95}px ${mapOffset.y * 75}px` }} />
               <div className="park park-a">느티 공원</div>
               <div className="park park-b">새봄 쉼터</div>
               <div className="water" />
               <div className="road road-a" /><div className="road road-b" /><div className="road road-c" />
-              <button className="stop stop-a" onClick={refill} aria-label="탐험볼 충전소">◈</button>
-              <button className="stop stop-b" onClick={refill} aria-label="탐험볼 충전소">◈</button>
+              {stopPoints.map(([x, y], index) => (
+                <button key={`${mapOffset.x}-${mapOffset.y}-${index}`} className="stop" style={{ left: `${x}%`, top: `${y}%` }} onClick={refill} aria-label="포켓스탑">◈</button>
+              ))}
               {spawns.map((spawn) => (
                 <button
                   key={spawn.key}
@@ -193,30 +358,34 @@ export function PocketTrails() {
                   onClick={() => openEncounter(spawn)}
                   aria-label={`${spawn.monster.name} 만나기`}
                 >
-                  <span>{spawn.monster.sprite}</span>
+                  <span><MonsterSprite monster={spawn.monster} /></span>
                   <i />
                 </button>
               ))}
               <div className="player" style={{ left: `${position.x}%`, top: `${position.y}%` }}>
                 <i /><span>🧢</span>
               </div>
-              <div className="map-title"><span>현재 위치</span><b>솔바람 마을</b></div>
               <button className="refresh" onClick={refreshWorld} aria-label="몬스터 새로 찾기">↻</button>
-              <button className={`gps-button ${gps}`} onClick={startGps} aria-label="GPS 탐험 시작">
-                <i>⌖</i><span>{gps === "on" ? "GPS 연결됨" : gps === "loading" ? "연결 중" : "GPS로 걷기"}</span>
+              <button className={`gps-button ${motion}`} onClick={startMotion} aria-label="휴대폰 동작 센서 시작">
+                <i>◌</i><span>{motion === "on" ? "동작 센서 연결됨" : motion === "loading" ? "센서 연결 중" : "동작 센서 시작"}</span>
               </button>
-              <div className="move-pad" aria-label="이동 조작">
-                <button onClick={() => move(0, -3)}>▲</button>
-                <button onClick={() => move(-3, 0)}>◀</button>
-                <button onClick={() => move(3, 0)}>▶</button>
-                <button onClick={() => move(0, 3)}>▼</button>
-              </div>
+              <button className="test-walk" onClick={simulateWalk} aria-label="테스트로 50센티미터 이동">
+                <i>＋50cm</i><span>테스트 걷기</span>
+              </button>
+              {motion !== "on" && (
+                <div className="move-pad" aria-label="동작 센서 연결 전 이동 조작">
+                  <button onClick={() => move(0, -3)}>▲</button>
+                  <button onClick={() => move(-3, 0)}>◀</button>
+                  <button onClick={() => move(3, 0)}>▶</button>
+                  <button onClick={() => move(0, 3)}>▼</button>
+                </div>
+              )}
               <aside className="nearby">
                 <div><b>주변 탐색</b><span>{spawns.length}마리</span></div>
                 <div className="near-list">
                   {nearby.slice(0, 3).map((item) => (
                     <button key={item.key} onClick={() => openEncounter(item)}>
-                      <em>{item.monster.sprite}</em><span>{item.monster.name}<small>{item.distance}m</small></span>
+                      <em><MonsterSprite monster={item.monster} /></em><span>{item.monster.name}<small>{item.distance}m</small></span>
                     </button>
                   ))}
                 </div>
@@ -231,10 +400,10 @@ export function PocketTrails() {
                 {MONSTERS.map((monster) => {
                   const count = save.caught[monster.id] || 0;
                   return <article key={monster.id} className={count ? "found" : "locked"}>
-                    <div style={{ background: `${monster.color}22`, color: monster.color }}>{count ? monster.sprite : "?"}</div>
+                    <div style={{ background: `${monster.color}22`, color: monster.color }}>{count ? <MonsterSprite monster={monster} /> : "?"}</div>
                     <span>NO.{String(MONSTERS.indexOf(monster) + 1).padStart(3, "0")}</span>
                     <b>{count ? monster.name : "미발견"}</b>
-                    <small>{count ? `${monster.type} · ${count}마리` : "???"}</small>
+                    <small>{count ? <><TypeBadges type={monster.type} /><em>{count}마리</em></> : "???"}</small>
                     {count > 0 && <p>{monster.description}</p>}
                   </article>;
                 })}
@@ -255,7 +424,9 @@ export function PocketTrails() {
                 <article><span>걸음</span><b>{save.steps}</b><small>회</small></article>
               </div>
               <section className="inventory">
-                <div><span className="ball-icon" /><p><b>탐험볼</b><small>야생 몬스터를 포획하는 도구</small></p><strong>{save.balls}</strong></div>
+                <div><span className="ball-icon basic" /><p><b>몬스터볼</b><small>야생 몬스터를 포획하는 기본 볼</small></p><strong>{save.balls}</strong></div>
+                <div><span className="ball-icon great" /><p><b>슈퍼볼</b><small>포획 확률 1.35배</small></p><strong>{save.greatBalls || 0}</strong></div>
+                <div><span className="ball-icon ultra" /><p><b>하이퍼볼</b><small>포획 확률 1.25배</small></p><strong>{save.ultraBalls || 0}</strong></div>
                 <button onClick={refill}>충전소 이용하기</button>
               </section>
               <button className="reset" onClick={() => { setSave(initialSave); setSpawns(createSpawns()); }}>저장 기록 초기화</button>
@@ -273,15 +444,57 @@ export function PocketTrails() {
           <div className="encounter" style={{ "--accent": selected.monster.color } as React.CSSProperties}>
             <button className="close-encounter" onClick={() => setSelected(null)}>×</button>
             <div className="encounter-sky"><i /><i /><i /></div>
-            <div className="encounter-monster"><div>{selected.monster.sprite}</div><span /></div>
+            <div className="encounter-monster"><div><MonsterSprite monster={selected.monster} /></div><span /></div>
             <section>
-              <span className="type">{selected.monster.type} 타입</span>
+              <TypeBadges type={selected.monster.type} />
               <h1>{selected.monster.name}</h1>
               <p>{selected.monster.description}</p>
               <div className="catch-rate"><span>포획 난이도</span><i>{Array.from({length: 5}, (_, i) => <b key={i} className={i < selected.monster.rarity ? "on" : ""} />)}</i></div>
+              <div className="ball-picker">
+                {(Object.keys(BALLS) as BallKind[]).map((kind) => {
+                  const ball = BALLS[kind];
+                  return <button key={kind} className={selectedBall === kind ? "active" : ""} onClick={() => setSelectedBall(kind)}>
+                    <span className={`ball-icon ${kind}`} /><b>{ball.name}</b><small>{save[ball.key] || 0}개</small>
+                  </button>;
+                })}
+              </div>
             </section>
-            <button className={`throw ${throwing ? "throwing" : ""}`} onClick={throwBall} disabled={!save.balls}>
-              <span className="ball-icon" /><b>{throwing ? "포획 중..." : "탐험볼 던지기"}</b><small>{save.balls}개 남음</small>
+            <button className={`throw ${throwing ? "throwing" : ""}`} onClick={throwBall} disabled={!(save[BALLS[selectedBall].key] || 0)}>
+              <span className={`ball-icon ${selectedBall}`} /><b>{throwing ? "포획 중..." : `${BALLS[selectedBall].name} 던지기`}</b><small>{save[BALLS[selectedBall].key] || 0}개 남음</small>
+            </button>
+          </div>
+        )}
+        {loaded && !save.starter && (
+          <div className="starter-screen">
+            <div className="starter-heading">
+              <span>WELCOME, EXPLORER</span>
+              <h1>첫 파트너를<br />선택하세요</h1>
+              <p>함께 길을 걷고 새로운 몬스터를 발견할 친구예요.</p>
+            </div>
+            <div className="starter-list">
+              {MONSTERS.slice(0, 3).map((monster, index) => (
+                <button key={monster.id} onClick={() => chooseStarter(monster)} style={{ "--starter": monster.color } as React.CSSProperties}>
+                  <small>NO.{String(index + 1).padStart(3, "0")}</small>
+                  <div><MonsterSprite monster={monster} /></div>
+                  <span>{monster.type} 타입</span>
+                  <b>{monster.name}</b>
+                  <p>{monster.description}</p>
+                  <strong>이 친구로 시작하기 →</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {loaded && save.starter && motion !== "on" && (
+          <div className="location-permission">
+            <div className="location-radar"><i /><i /><span>⌖</span></div>
+            <span>MOTION ADVENTURE</span>
+            <h2>{motion === "loading" ? "동작 센서 연결 중..." : "휴대폰을 움직여 탐험하기"}</h2>
+            <p>{motion === "error"
+              ? "동작 및 방향 접근이 꺼져 있습니다. Safari 권한을 확인한 뒤 다시 눌러주세요."
+              : "휴대폰을 들고 걷거나 가볍게 움직이면 향하고 있는 방향으로 캐릭터가 이동합니다."}</p>
+            <button onClick={startMotion} disabled={motion === "loading"}>
+              {motion === "loading" ? "센서 연결 중" : "동작 센서 허용하고 시작"}
             </button>
           </div>
         )}

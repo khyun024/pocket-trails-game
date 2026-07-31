@@ -3,3 +3,6 @@ dist/
 .wrangler/
 .next/
 *.tar.gz
+tools/cloudflared.exe
+tunnel-output.txt
+tunnel-error.txt
