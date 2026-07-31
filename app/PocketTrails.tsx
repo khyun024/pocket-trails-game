@@ -387,7 +387,7 @@ export function PocketTrails() {
 
   function throwBall(swipe: { dx: number; upward: number; curve?: number }) {
     const ball = BALLS[selectedBall];
-    if (!selected || throwing) return;
+    if (!selected || (save[ball.key] || 0) < 1 || throwing) return;
     const curveDirection = Math.sign(swipe.curve || 0);
     const trajectoryX = Math.max(-115, Math.min(115, swipe.dx * 1.3 + curveDirection * 45));
     const timingDistance = Math.abs(monsterX - trajectoryX) + Math.abs(swipe.upward - 125) * .22;
@@ -405,6 +405,10 @@ export function PocketTrails() {
     setThrowMidY(flightY * .56);
     setTimingLabel(`${timing.label}${curveDirection ? " · CURVEBALL" : ""}`);
     setThrowing(true);
+    setSave((current) => ({
+      ...current,
+      [ball.key]: Math.max(0, (current[ball.key] || 0) - 1),
+    }));
     playThrowSound(Boolean(curveDirection));
     navigator.vibrate?.(curveDirection ? [10, 18, 10] : 12);
     const target = selected;
@@ -447,7 +451,7 @@ export function PocketTrails() {
   }
 
   function beginBallSwipe(event: React.PointerEvent<HTMLButtonElement>) {
-    if (throwing) return;
+    if (throwing || !(save[BALLS[selectedBall].key] || 0)) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     throwStart.current = {
       x: event.clientX,
@@ -561,18 +565,17 @@ export function PocketTrails() {
   }
 
   function refill() {
-    if (save.balls >= 30 && (save.greatBalls || 0) >= 10 && (save.ultraBalls || 0) >= 3 && save.razzBerries >= 10 && save.raidPasses >= 3) return;
     setSave((s) => ({
       ...s,
-      balls: Math.max(30, s.balls),
-      greatBalls: Math.max(10, s.greatBalls || 0),
-      ultraBalls: Math.max(3, s.ultraBalls || 0),
-      razzBerries: Math.max(10, s.razzBerries),
-      nanabBerries: Math.max(7, s.nanabBerries),
-      pinapBerries: Math.max(5, s.pinapBerries),
-      raidPasses: Math.max(3, s.raidPasses),
+      balls: s.balls + 6,
+      greatBalls: (s.greatBalls || 0) + 3,
+      ultraBalls: (s.ultraBalls || 0) + 1,
+      razzBerries: s.razzBerries + 3,
+      nanabBerries: s.nanabBerries + 2,
+      pinapBerries: s.pinapBerries + 2,
+      raidPasses: s.raidPasses + 1,
     }));
-    setMessage("볼·열매·레이드패스를 충전했어요!");
+    setMessage("가방 제한 없이 아이템을 받았어요!");
     setTimeout(() => setMessage(""), 1800);
   }
 
@@ -835,7 +838,7 @@ export function PocketTrails() {
 
           {tab === "bag" && (
             <div className="content-panel bag-panel">
-              <div className="panel-heading"><span>EXPLORER KIT</span><h1>내 가방</h1><p>모험 기록은 이 기기에 자동 저장돼요.</p></div>
+              <div className="panel-heading"><span>EXPLORER KIT · 용량 제한 없음</span><h1>내 가방</h1><p>아이템을 개수 제한 없이 계속 모을 수 있어요.</p></div>
               <section className="profile-card">
                 <div className="avatar">🧢</div><div><span>탐험가</span><h2>LEVEL {level}</h2><p>다음 레벨까지 {100 - save.xp % 100} XP</p></div>
                 <div className="xp-ring">{save.xp % 100}%</div>
@@ -846,9 +849,9 @@ export function PocketTrails() {
                 <article><span>걸음</span><b>{save.steps}</b><small>회</small></article>
               </div>
               <section className="inventory">
-                <div><span className="ball-icon basic" /><p><b>몬스터볼</b><small>야생 몬스터를 포획하는 기본 볼</small></p><strong>∞</strong></div>
-                <div><span className="ball-icon great" /><p><b>슈퍼볼</b><small>포획 확률 1.35배</small></p><strong>∞</strong></div>
-                <div><span className="ball-icon ultra" /><p><b>하이퍼볼</b><small>포획 확률 1.25배</small></p><strong>∞</strong></div>
+                <div><span className="ball-icon basic" /><p><b>몬스터볼</b><small>야생 몬스터를 포획하는 기본 볼</small></p><strong>{save.balls}</strong></div>
+                <div><span className="ball-icon great" /><p><b>슈퍼볼</b><small>포획 확률 1.35배</small></p><strong>{save.greatBalls || 0}</strong></div>
+                <div><span className="ball-icon ultra" /><p><b>하이퍼볼</b><small>포획 확률 1.25배</small></p><strong>{save.ultraBalls || 0}</strong></div>
                 <div><span className="item-emoji">🍓</span><p><b>라즈열매</b><small>포획 확률을 높여요</small></p><strong>{save.razzBerries}</strong></div>
                 <div><span className="item-emoji">🍌</span><p><b>나나열매</b><small>포켓몬 움직임을 늦춰요</small></p><strong>{save.nanabBerries}</strong></div>
                 <div><span className="item-emoji">🍍</span><p><b>파인열매</b><small>받는 사탕이 2배가 돼요</small></p><strong>{save.pinapBerries}</strong></div>
@@ -905,8 +908,9 @@ export function PocketTrails() {
                     key={kind}
                     className={selectedBall === kind ? "active" : ""}
                     onClick={() => { setSelectedBall(kind); setBallMenuOpen(false); }}
+                    disabled={!(save[ball.key] || 0)}
                   >
-                    <span className={`ball-icon ${kind}`} /><b>{ball.name}</b><small>∞</small>
+                    <span className={`ball-icon ${kind}`} /><b>{ball.name}</b><small>{save[ball.key] || 0}개</small>
                   </button>;
                 })}
               </div>
@@ -948,11 +952,11 @@ export function PocketTrails() {
                     throwBall({ dx: 0, upward: 125, curve: 0 });
                   }
                 }}
-                disabled={throwing}
+                disabled={!(save[BALLS[selectedBall].key] || 0) || throwing}
                 aria-label={`${BALLS[selectedBall].name}을 위로 스와이프해서 던지기`}
               >
                 <span className={`ball-icon ${selectedBall}`} />
-                <small>∞</small>
+                <small>{save[BALLS[selectedBall].key] || 0}</small>
               </button>
               <button className="encounter-item ball-bag" onClick={() => { setBallMenuOpen((open) => !open); setBerryMenuOpen(false); }} aria-label="볼 선택">
                 <span className={`ball-icon ${selectedBall}`} />
