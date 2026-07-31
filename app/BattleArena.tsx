@@ -7,8 +7,7 @@ import type { Monster } from "./monster-data";
 type BattleMessage =
   | { type: "ready"; monster: Monster }
   | { type: "damage"; amount: number }
-  | { type: "hp"; hp: number }
-  | { type: "restart"; monster: Monster };
+  | { type: "hp"; hp: number };
 
 function BattleSprite({ monster }: { monster: Monster }) {
   const src = `${import.meta.env.BASE_URL || "/"}${monster.sprite.replace(/^\//, "")}`;
@@ -25,8 +24,10 @@ export function BattleArena({ owned }: { owned: Monster[] }) {
   const [myHp, setMyHp] = useState(100);
   const [opponentHp, setOpponentHp] = useState(100);
   const [cooldown, setCooldown] = useState(false);
+  const [result, setResult] = useState<"win" | "lose" | null>(null);
   const peerRef = useRef<Peer | null>(null);
   const connectionRef = useRef<DataConnection | null>(null);
+  const battleEndedRef = useRef(false);
   const selectedRef = useRef(selectedId);
   const selected = owned.find((monster) => monster.id === selectedId) || owned[0];
 
@@ -52,33 +53,48 @@ export function BattleArena({ owned }: { owned: Monster[] }) {
       setConnected(true);
       setMyHp(100);
       setOpponentHp(100);
+      setResult(null);
+      battleEndedRef.current = false;
       setStatus("친구와 연결됐어요. 배틀 시작!");
       const monster = owned.find((item) => item.id === selectedRef.current) || owned[0];
       if (monster) connection.send({ type: "ready", monster } satisfies BattleMessage);
     });
     connection.on("data", (raw) => {
       const message = raw as BattleMessage;
-      if (message.type === "ready" || message.type === "restart") {
+      if (message.type === "ready") {
         setOpponent(message.monster);
         setOpponentHp(100);
-        if (message.type === "restart") setMyHp(100);
       }
       if (message.type === "damage") {
+        if (battleEndedRef.current) return;
         setMyHp((hp) => {
           const next = Math.max(0, hp - message.amount);
           connection.send({ type: "hp", hp: next } satisfies BattleMessage);
-          if (next === 0) setStatus("패배! 다시 배틀할 수 있어요.");
+          if (next === 0) {
+            battleEndedRef.current = true;
+            setResult("lose");
+            setCooldown(false);
+            setStatus("패배! 이번 배틀이 종료됐어요.");
+          }
           return next;
         });
       }
       if (message.type === "hp") {
+        if (battleEndedRef.current) return;
         setOpponentHp(message.hp);
-        if (message.hp === 0) setStatus("승리! 친구 포켓몬을 쓰러뜨렸어요.");
+        if (message.hp === 0) {
+          battleEndedRef.current = true;
+          setResult("win");
+          setCooldown(false);
+          setStatus("승리! 이번 배틀이 종료됐어요.");
+        }
       }
     });
     connection.on("close", () => {
       setConnected(false);
       setOpponent(null);
+      setResult(null);
+      battleEndedRef.current = false;
       setStatus("친구와 연결이 끊어졌어요.");
     });
   }
@@ -90,19 +106,24 @@ export function BattleArena({ owned }: { owned: Monster[] }) {
   }
 
   function attack() {
-    if (!connectionRef.current?.open || !selected || !opponent || cooldown || myHp <= 0 || opponentHp <= 0) return;
+    if (!connectionRef.current?.open || !selected || !opponent || cooldown || battleEndedRef.current || myHp <= 0 || opponentHp <= 0) return;
     const damage = 7 + selected.rarity * 2 + Math.floor(Math.random() * 6);
     connectionRef.current.send({ type: "damage", amount: damage } satisfies BattleMessage);
     setCooldown(true);
     setTimeout(() => setCooldown(false), 850);
   }
 
-  function restart() {
-    if (!connectionRef.current?.open || !selected) return;
+  function returnToLobby() {
+    battleEndedRef.current = false;
+    connectionRef.current?.close();
+    connectionRef.current = null;
+    setConnected(false);
+    setOpponent(null);
     setMyHp(100);
     setOpponentHp(100);
-    setStatus("재대결 시작!");
-    connectionRef.current.send({ type: "restart", monster: selected } satisfies BattleMessage);
+    setResult(null);
+    setCooldown(false);
+    setStatus("새 배틀을 시작하려면 코드를 다시 연결하세요.");
   }
 
   if (!owned.length) {
@@ -134,9 +155,9 @@ export function BattleArena({ owned }: { owned: Monster[] }) {
             <div className="hp-bar"><span style={{ width: `${myHp}%` }} /></div>
             {selected && <><BattleSprite monster={selected} /><b>{selected.name}</b></>}
           </div>
-          {myHp > 0 && opponentHp > 0
+          {!result
             ? <button className="battle-attack" onClick={attack} disabled={!opponent || cooldown}>{cooldown ? "기술 충전 중…" : "공격!"}</button>
-            : <button className="battle-attack rematch" onClick={restart}>재대결</button>}
+            : <button className="battle-attack rematch" onClick={returnToLobby}>{result === "win" ? "승리 · 로비로" : "패배 · 로비로"}</button>}
         </section>
       )}
     </div>
